@@ -1,0 +1,18 @@
+@keyframes floatUp {
+  0% { transform: translateY(0) scale(0.8); opacity: 1; }
+  100% { transform: translateY(-180px) scale(1.4); opacity: 0; }
+}
+
+.animate-float {
+  animation: floatUp 2.5s ease-out forwards;
+}
+
+@keyframes danmakuFly {
+  0% { left: 100%; transform: translateX(0%); }
+  100% { left: 0%; transform: translateX(-100%); }
+}
+
+.animate-danmaku {
+  animation: danmakuFly 6s linear forwards;
+  will-change: left, transform;
+}
