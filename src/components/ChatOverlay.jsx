@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Send, Image, MessageSquare, Search, X, Loader2, MicOff } from 'lucide-react';
+import { translations } from '../locales/translations';
 
 const EMOJIS = ['❤️', '🔥', '😂', '👍', '🎉', '😮'];
 
@@ -14,7 +15,8 @@ export default function ChatOverlay({
   currentUsername,
   userColor,
   theme,
-  isMuted
+  isMuted,
+  lang = 'tr'
 }) {
   const [text, setText] = useState('');
   const [showGifModal, setShowGifModal] = useState(false);
@@ -23,6 +25,8 @@ export default function ChatOverlay({
   const [isSearchingGifs, setIsSearchingGifs] = useState(false);
   const chatEndRef = useRef(null);
   const typingTimeoutRef = useRef(null);
+
+  const t = translations[lang] || translations.tr;
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -59,7 +63,7 @@ export default function ChatOverlay({
         setGifResults(urls);
       }
     } catch (e) {
-      console.error('GIF yüklenemedi:', e);
+      console.error('GIF fetch failed:', e);
     } finally {
       setIsSearchingGifs(false);
     }
@@ -76,20 +80,20 @@ export default function ChatOverlay({
     <div className={`flex flex-col h-full ${theme.panel} p-3 relative shadow-xl`}>
       {/* Danmaku Barı */}
       <div className="flex items-center justify-between pb-2 mb-2 border-b border-black/10 text-[11px]">
-        <span className="font-bold opacity-80">Canlı Sohbet</span>
+        <span className="font-bold opacity-80">{t.liveChat}</span>
         <button
           onClick={onToggleDanmaku}
           className={`flex items-center gap-1 px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${theme.badge}`}
         >
           <MessageSquare size={12} />
-          <span>Danmaku: {danmakuEnabled ? 'Açık' : 'Kapalı'}</span>
+          <span>{danmakuEnabled ? t.danmakuOn : t.danmakuOff}</span>
         </button>
       </div>
 
       {/* Mesaj Akışı */}
       <div className="flex-1 overflow-y-auto space-y-2.5 mb-2 pr-1">
         {messages.length === 0 ? (
-          <div className="text-xs opacity-60 text-center mt-6">Sohbet burada başlayacak...</div>
+          <div className="text-xs opacity-60 text-center mt-6">{t.chatEmpty}</div>
         ) : (
           messages.map((m) => {
             const isMe = m.sender === currentUsername;
@@ -99,7 +103,7 @@ export default function ChatOverlay({
                   className="text-[10px] font-bold mb-0.5 px-1"
                   style={{ color: m.color || (isMe ? '#3b82f6' : '#8b5cf6') }}
                 >
-                  {isMe ? 'Sen' : m.sender}
+                  {isMe ? t.you : m.sender}
                 </span>
 
                 {m.type === 'GIF' ? (
@@ -116,7 +120,7 @@ export default function ChatOverlay({
         {typingUser && (
           <div className="text-[11px] opacity-70 italic flex items-center gap-1.5 animate-pulse">
             <span className="w-1.5 h-1.5 rounded-full bg-current" />
-            {typingUser} yazıyor...
+            {typingUser} {t.typing}
           </div>
         )}
         <div ref={chatEndRef} />
@@ -142,7 +146,7 @@ export default function ChatOverlay({
           disabled={isMuted}
           onClick={() => { setShowGifModal(true); if (!gifResults.length) searchGifs('trending'); }}
           className={`${theme.buttonSecondary} p-2 rounded-xl cursor-pointer disabled:opacity-40`}
-          title="GIF Gönder"
+          title={t.sendGif}
         >
           <Image size={15} />
         </button>
@@ -151,7 +155,7 @@ export default function ChatOverlay({
           disabled={isMuted}
           value={text}
           onChange={handleInputChange}
-          placeholder={isMuted ? 'Host tarafından susturuldunuz...' : 'Mesaj yazın...'}
+          placeholder={isMuted ? t.mutedNotice : t.chatPlaceholder}
           className={`flex-1 ${theme.input} text-xs px-3 py-2 outline-none disabled:opacity-50`}
         />
         <button
@@ -166,7 +170,7 @@ export default function ChatOverlay({
       {/* Susturuldu Bildirimi */}
       {isMuted && (
         <div className="mt-1 text-[10px] text-rose-500 font-bold flex items-center justify-center gap-1">
-          <MicOff size={11} /> Sohbet yetkiniz askıya alındı.
+          <MicOff size={11} /> {t.mutedStatus}
         </div>
       )}
 
@@ -174,7 +178,7 @@ export default function ChatOverlay({
       {showGifModal && !isMuted && (
         <div className={`absolute inset-0 z-50 ${theme.panel} p-3 flex flex-col`}>
           <div className="flex items-center justify-between pb-2 border-b border-black/10">
-            <span className="text-xs font-bold">Tenor GIF Ara & Gönder</span>
+            <span className="text-xs font-bold">{t.gifSearchTitle}</span>
             <button onClick={() => setShowGifModal(false)} className="cursor-pointer opacity-70 hover:opacity-100">
               <X size={16} />
             </button>
@@ -183,7 +187,7 @@ export default function ChatOverlay({
           <div className="flex gap-1.5 my-2">
             <input
               type="text"
-              placeholder="Örn: anime, laugh, dance..."
+              placeholder={t.gifSearchPlaceholder}
               value={gifQuery}
               onChange={(e) => setGifQuery(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), searchGifs(gifQuery))}
@@ -200,7 +204,7 @@ export default function ChatOverlay({
           <div className="flex-1 overflow-y-auto grid grid-cols-2 gap-2 p-1">
             {isSearchingGifs ? (
               <div className="col-span-2 text-center text-xs opacity-70 py-6 flex items-center justify-center gap-1.5">
-                <Loader2 size={14} className="animate-spin" /> Yükleniyor...
+                <Loader2 size={14} className="animate-spin" /> {t.gifLoading}
               </div>
             ) : gifResults.length > 0 ? (
               gifResults.map((url, i) => (
@@ -213,7 +217,7 @@ export default function ChatOverlay({
                 />
               ))
             ) : (
-              <div className="col-span-2 text-center text-xs opacity-60 py-6">GIF bulunamadı.</div>
+              <div className="col-span-2 text-center text-xs opacity-60 py-6">{t.gifNotFound}</div>
             )}
           </div>
         </div>

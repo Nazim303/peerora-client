@@ -102,10 +102,12 @@ export default function SettingsModal({
                       : 'border border-black/10 hover:bg-black/5 opacity-80'
                   }`}
                 >
-                  <div className="flex flex-col pr-2">
-                    <span className="text-xs font-bold">{theme.name}</span>
-                    <span className="text-[10px] opacity-75">{theme.desc}</span>
-                  </div>
+                 <div className="flex flex-col pr-2">
+  <span className="text-xs font-bold">{theme.name}</span>
+  <span className="text-[10px] opacity-75">
+    {typeof theme.desc === 'object' ? (theme.desc[lang] || theme.desc.en) : theme.desc}
+  </span>
+</div>
                   <span className={`w-4 h-4 rounded-full shrink-0 ${theme.previewAccent}`} />
                 </button>
               ))}

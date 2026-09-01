@@ -4,6 +4,7 @@ import {
   Volume2, VolumeX, Maximize2, Minimize2, Wand2, 
   Subtitles, Zap, Gauge, Settings as SettingsIcon, Check 
 } from 'lucide-react';
+import { translations } from '../locales/translations';
 
 export function parseVideoUrl(url) {
   if (!url) return { type: 'NONE', id: null, embedUrl: null };
@@ -76,7 +77,8 @@ export default function VideoPlayer({
   onVideoEnded,
   laserPoints,
   onLaserEmit,
-  userColor
+  userColor,
+  lang = 'tr'
 }) {
   const containerRef = useRef(null);
   const canvasRef = useRef(null);
@@ -86,6 +88,8 @@ export default function VideoPlayer({
   const ytPlayerRef = useRef(null);
   const hlsRef = useRef(null);
   const isSyncingRef = useRef(false);
+
+  const t = translations[lang] || translations.tr;
 
   // Lazer
   const [isLaserMode, setIsLaserMode] = useState(false);
@@ -122,7 +126,7 @@ export default function VideoPlayer({
     }
   };
 
-  // 1. YouTube IFrame API Entegrasyonu (Origin Hatasız & Kararlı)
+  // 1. YouTube IFrame API Entegrasyonu
   useEffect(() => {
     if (parsedMedia.type !== 'YOUTUBE' || isLiveStreamActive) return;
     const ytId = parsedMedia.id;
@@ -133,7 +137,6 @@ export default function VideoPlayer({
     loadYouTubeIframeAPI(() => {
       if (isCancelled) return;
 
-      // Oynatıcı zaten varsa sadece videoyu değiştir
       if (ytPlayerRef.current && typeof ytPlayerRef.current.loadVideoById === 'function') {
         try {
           ytPlayerRef.current.loadVideoById({
@@ -147,7 +150,6 @@ export default function VideoPlayer({
         return;
       }
 
-      // Yeni Oynatıcı Oluştur (youtube.com origin standardı)
       try {
         ytPlayerRef.current = new window.YT.Player('yt-player-target', {
           videoId: ytId,
@@ -192,6 +194,7 @@ export default function VideoPlayer({
       isCancelled = true;
     };
   }, [parsedMedia.id, parsedMedia.type, isHost, isLiveStreamActive]);
+
   // 2. MP4 / HLS Video Yönetimi
   useEffect(() => {
     if (isLiveStreamActive || parsedMedia.type !== 'DIRECT' || !sourceUrl || !videoRef.current) return;
@@ -227,15 +230,13 @@ export default function VideoPlayer({
     };
   }, [sourceUrl, isLiveStreamActive, parsedMedia.type]);
 
-  // 3. Misafir Senkronizasyonu & Drift Düzeltmesi (Hatasız Sıralama)
+  // 3. Misafir Senkronizasyonu & Drift Düzeltmesi
   useEffect(() => {
     if (!playbackState || isLiveStreamActive || isHost) return;
     isSyncingRef.current = true;
 
-    // 1. Önce targetTime tanımlanır
     let targetTime = playbackState.currentTime || 0;
 
-    // 2. Ağ gecikmesi varsa hesaplanıp eklenir
     if (playbackState.state === 'PLAYING' && playbackState.timestamp) {
       const elapsed = (Date.now() - playbackState.timestamp) / 1000;
       if (elapsed > 0 && elapsed < 4) {
@@ -245,14 +246,12 @@ export default function VideoPlayer({
 
     const isTargetPlaying = playbackState.state === 'PLAYING';
 
-    // Hız Senkronizasyonu
     if (playbackState.playbackRate && playbackState.playbackRate !== currentSpeed) {
       setCurrentSpeed(playbackState.playbackRate);
       sendYtCommand('setPlaybackRate', [playbackState.playbackRate]);
       if (videoRef.current) videoRef.current.playbackRate = playbackState.playbackRate;
     }
 
-    // YouTube Senkronizasyonu
     if (parsedMedia.type === 'YOUTUBE' && ytPlayerRef.current?.getPlayerState) {
       try {
         const pState = ytPlayerRef.current.getPlayerState();
@@ -264,14 +263,12 @@ export default function VideoPlayer({
           ytPlayerRef.current.pauseVideo();
         }
 
-        // 1.5 saniyeden fazla kayma varsa arayı kapat
         if (Math.abs(localTime - targetTime) > 1.5) {
           ytPlayerRef.current.seekTo(targetTime, true);
         }
       } catch (e) {}
     }
 
-    // MP4 Senkronizasyonu
     if (parsedMedia.type === 'DIRECT' && videoRef.current && sourceUrl) {
       const video = videoRef.current;
       if (isTargetPlaying && video.paused) video.play().catch(() => {});
@@ -284,6 +281,7 @@ export default function VideoPlayer({
 
     setTimeout(() => { isSyncingRef.current = false; }, 200);
   }, [playbackState, isHost, parsedMedia.type, isLiveStreamActive, currentSpeed]);
+
   // 4. Host Hızlandırma Butonu
   const handleSpeedChange = (speed) => {
     if (!isHost) return;
@@ -304,7 +302,7 @@ export default function VideoPlayer({
     setShowSpeedMenu(false);
   };
 
-  // 5. Bağımsız Yerel Ses Ayarı (Host sesi kapatsa da Guest'in sesi etkilenmez)
+  // 5. Bağımsız Yerel Ses Ayarı
   const handleVolumeChange = (newVol) => {
     setLocalVolume(newVol);
     setIsLocalMuted(newVol === 0);
@@ -341,7 +339,7 @@ export default function VideoPlayer({
 
     if (nextCc) {
       sendYtCommand('loadModule', ['captions']);
-      sendYtCommand('setOption', ['captions', 'track', { languageCode: 'tr' }]);
+      sendYtCommand('setOption', ['captions', 'track', { languageCode: lang === 'tr' ? 'tr' : 'en' }]);
       sendYtCommand('setOption', ['captions', 'reload', true]);
     } else {
       sendYtCommand('unloadModule', ['captions']);
@@ -373,8 +371,7 @@ export default function VideoPlayer({
     setShowQualityMenu(false);
   };
 
-  // 8. Misafir "Host'a Eşitle" Butonu (Anlık İleri/Geri Sarma)
- // 8. Misafir "Host'a Eşitle" Butonu (Tam Canlı Süreye Zıplama)
+  // 8. Misafir "Host'a Eşitle" Butonu
   const handleJumpToHost = () => {
     let targetTime = playbackState?.currentTime || 0;
     if (playbackState?.state === 'PLAYING' && playbackState?.timestamp) {
@@ -395,6 +392,7 @@ export default function VideoPlayer({
     setSyncToast(true);
     setTimeout(() => setSyncToast(false), 2000);
   };
+
   // 9. Lazer Tuvali Çizimi
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -480,7 +478,7 @@ export default function VideoPlayer({
     }
   }, [peerStream]);
 
-  // Host Kalp Atışı (Her saniye zaman ve durum damgasını yayar)
+  // Host Kalp Atışı
   useEffect(() => {
     if (!isHost || isLiveStreamActive) return;
 
@@ -532,7 +530,7 @@ export default function VideoPlayer({
               }}
               className="absolute z-40 bg-blue-600 text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow-2xl animate-bounce cursor-pointer"
             >
-              <Volume2 size={16} /> Sesi Aç
+              <Volume2 size={16} /> {t.unmuteBtn}
             </button>
           )}
         </div>
@@ -540,7 +538,6 @@ export default function VideoPlayer({
         /* 2. YOUTUBE OYNATICI */
         <div className="absolute inset-0 w-full h-full bg-black flex items-center justify-center">
           <div id="yt-player-target" className="w-full h-full pointer-events-auto" />
-          {/* Misafirin videoya tıklayıp durdurmasını engelleyen şeffaf kalkan */}
           {!isHost && <div className="absolute inset-0 z-20 bg-transparent pointer-events-auto cursor-default" />}
         </div>
       ) : parsedMedia.embedUrl ? (
@@ -574,8 +571,8 @@ export default function VideoPlayer({
       ) : (
         /* 5. BOŞ DURUM */
         <div className="absolute inset-0 w-full h-full flex flex-col items-center justify-center gap-1.5 text-center p-4 text-gray-500 text-xs">
-          <span className="font-semibold text-gray-400">Henüz Medya Seçilmedi</span>
-          <span className="text-[11px] text-gray-600">YouTube, Twitch, Vimeo veya MP4 linki yükleyin</span>
+          <span className="font-semibold text-gray-400">{t.noMediaTitle}</span>
+          <span className="text-[11px] text-gray-600">{t.noMediaDesc}</span>
         </div>
       )}
 
@@ -611,7 +608,7 @@ export default function VideoPlayer({
       {/* EŞİTLENDİ BİLDİRİMİ */}
       {syncToast && (
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-emerald-600/90 text-white font-bold text-xs px-4 py-2 rounded-2xl shadow-2xl backdrop-blur-md animate-bounce flex items-center gap-1.5 border border-emerald-400">
-          <Zap size={14} fill="currentColor" /> Host'un Yayınına Eşitlendi!
+          <Zap size={14} fill="currentColor" /> {t.syncedToast}
         </div>
       )}
 
@@ -628,10 +625,10 @@ export default function VideoPlayer({
                 ? 'bg-rose-600 text-white border-rose-400 animate-pulse'
                 : 'bg-black/75 hover:bg-black/90 text-gray-300 border-white/10'
             }`}
-            title={isLaserMode ? 'Lazer Kalemi Kapat' : 'Lazer Kalemi Aç'}
+            title={isLaserMode ? t.laserOn : t.laser}
           >
             <Wand2 size={15} />
-            <span className="hidden sm:inline">{isLaserMode ? 'Lazer Açık' : 'Lazer'}</span>
+            <span className="hidden sm:inline">{isLaserMode ? t.laserOn : t.laser}</span>
           </button>
 
           {/* Host Hız Menüsü */}
@@ -640,7 +637,7 @@ export default function VideoPlayer({
               <button
                 onClick={() => setShowSpeedMenu((p) => !p)}
                 className="bg-black/75 hover:bg-black/90 text-white p-2 rounded-xl backdrop-blur-md border border-white/10 text-xs font-bold flex items-center gap-1 cursor-pointer shadow-lg"
-                title="Oynatma Hızı"
+                title={t.playbackSpeed}
               >
                 <Gauge size={14} />
                 <span>{currentSpeed}x</span>
@@ -670,22 +667,23 @@ export default function VideoPlayer({
             <button
               onClick={handleJumpToHost}
               className="bg-amber-500/90 hover:bg-amber-400 text-black font-black px-2.5 py-1.5 rounded-xl backdrop-blur-md border border-amber-300 text-xs flex items-center gap-1 cursor-pointer shadow-lg transition-transform active:scale-95"
-              title="Arayı Kapat ve Host'a Eşitlen"
+              title={t.syncHostTitle}
             >
               <Zap size={14} fill="currentColor" />
-              <span>Host'a Eşitle</span>
+              <span>{t.syncHost}</span>
             </button>
           )}
         </div>
 
-  {/* Sağ / Ses & Kalite & Tam Ekran */}
-  <div className="flex items-center gap-1.5 pointer-events-auto shrink-0">
-    {/* Ses Slider (Mobilde Daraltılmış) */}
-<div className="flex items-center gap-1 bg-black/75 backdrop-blur-md border border-white/10 px-2 py-1.5 rounded-xl shadow-lg">
+        {/* SAĞ GRUP (Ses + Altyazı + Kalite + Tam Ekran) */}
+        <div className="flex items-center gap-1.5 pointer-events-auto shrink-0">
+          
+          {/* Kişisel Ses & Mute Kontrolü */}
+          <div className="flex items-center gap-1 bg-black/75 backdrop-blur-md border border-white/10 px-2 py-1.5 rounded-xl shadow-lg">
             <button
               onClick={handleToggleMute}
               className="text-gray-300 hover:text-white cursor-pointer"
-              title={isLocalMuted ? 'Sesi Aç' : 'Sesi Kapat'}
+              title={isLocalMuted ? t.unmuteBtn : 'Mute'}
             >
               {isLocalMuted || localVolume === 0 ? <VolumeX size={15} /> : <Volume2 size={15} />}
             </button>
@@ -699,6 +697,7 @@ export default function VideoPlayer({
               className="w-10 sm:w-16 accent-blue-500 cursor-pointer h-1 bg-white/20 rounded-lg"
             />
           </div>
+
           {/* Bağımsız Altyazı (CC) */}
           <button
             onClick={handleToggleCc}
@@ -707,26 +706,26 @@ export default function VideoPlayer({
                 ? 'bg-blue-600 text-white border-blue-400'
                 : 'bg-black/75 hover:bg-black/90 text-gray-300 border-white/10'
             }`}
-            title="Kişisel Altyazı (CC)"
+            title={t.captionsTitle}
           >
             <Subtitles size={15} />
           </button>
 
-          {/* Bağımsız Kalite / Çözünürlük Menüsü */}
+          {/* Bağımsız Kalite Menüsü */}
           <div className="relative">
             <button
               onClick={() => setShowQualityMenu((p) => !p)}
               className="bg-black/75 hover:bg-black/90 text-white p-2 rounded-xl backdrop-blur-md border border-white/10 text-xs font-bold flex items-center gap-1 cursor-pointer shadow-lg"
-              title="Kişisel Çözünürlük"
+              title={t.qualityTitle}
             >
               <SettingsIcon size={14} />
-              <span className="uppercase text-[10px]">{selectedQuality === 'auto' ? 'Oto' : selectedQuality.replace('hd', '') + 'p'}</span>
+              <span className="uppercase text-[10px]">{selectedQuality === 'auto' ? t.autoQuality : selectedQuality.replace('hd', '') + 'p'}</span>
             </button>
 
             {showQualityMenu && (
               <div className="absolute top-full right-0 mt-1 bg-slate-900/95 backdrop-blur-md border border-white/15 rounded-xl p-1 shadow-2xl flex flex-col gap-1 z-50 text-[11px] min-w-21.25">
                 {[
-                  { id: 'auto', label: 'Otomatik' },
+                  { id: 'auto', label: t.autoQuality },
                   { id: 'hd1080', label: '1080p' },
                   { id: 'hd720', label: '720p' },
                   { id: 'large', label: '480p' },
@@ -752,7 +751,7 @@ export default function VideoPlayer({
             <button
               onClick={toggleFullscreen}
               className="bg-black/75 hover:bg-black/90 text-white p-2 rounded-xl backdrop-blur-md border border-white/10 transition-all cursor-pointer shadow-lg active:scale-95"
-              title="Tam Ekran"
+              title={t.fullscreenTitle}
             >
               {isFullscreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
             </button>

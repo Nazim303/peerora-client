@@ -2,7 +2,10 @@ export const THEMES = {
   neo_brutalism: {
     id: 'neo_brutalism',
     name: 'Neo-Brutalism (Pop Art)',
-    desc: 'Kalın siyah hatlar, sert gölgeler ve canlı neon pop renkler.',
+    desc: {
+      tr: 'Kalın siyah hatlar, sert gölgeler ve canlı neon pop renkler.',
+      en: 'Bold black outlines, hard shadows, and vibrant pop colors.'
+    },
     bg: 'bg-[#fef08a]',
     textColor: 'text-black',
     panel: 'bg-white border-3 border-black shadow-[5px_5px_0px_#000] rounded-2xl',
@@ -19,7 +22,10 @@ export const THEMES = {
   cyberpunk: {
     id: 'cyberpunk',
     name: 'Cyberpunk 2077 HUD',
-    desc: 'Neon camgöbeği ışıma, yüksek teknoloji HUD çizgileri ve karanlık estetik.',
+    desc: {
+      tr: 'Neon camgöbeği ışıma, yüksek teknoloji HUD çizgileri ve karanlık estetik.',
+      en: 'Neon cyan glow, high-tech HUD lines, and dark aesthetics.'
+    },
     bg: 'bg-[#05050c]',
     textColor: 'text-cyan-300 font-mono',
     panel: 'bg-[#0a0d1a]/95 border border-cyan-500/40 shadow-[0_0_20px_rgba(6,182,212,0.2)] rounded-lg',
@@ -36,7 +42,10 @@ export const THEMES = {
   retro_os: {
     id: 'retro_os',
     name: 'Retro OS (Windows 95)',
-    desc: '90’lar işletim sistemi pencereleri, 3D kabartmalı gri çerçeveler.',
+    desc: {
+      tr: '90’lar işletim sistemi pencereleri, 3D kabartmalı gri çerçeveler.',
+      en: '90s operating system windows with 3D embossed gray bevels.'
+    },
     bg: 'bg-[#008080]',
     textColor: 'text-black font-sans',
     panel: 'bg-[#c0c0c0] border-t-2 border-l-2 border-t-white border-l-white border-b-2 border-r-2 border-b-black border-r-black shadow-lg rounded-none',
@@ -53,7 +62,10 @@ export const THEMES = {
   matrix: {
     id: 'matrix',
     name: 'Matrix Hacker Terminal',
-    desc: 'CRT monitör hissi, yeşil fosforlu kodlar ve saf terminal düzeni.',
+    desc: {
+      tr: 'CRT monitör hissi, yeşil fosforlu kodlar ve saf terminal düzeni.',
+      en: 'CRT monitor feel, green phosphor characters, and pure terminal aesthetic.'
+    },
     bg: 'bg-[#020703]',
     textColor: 'text-emerald-400 font-mono',
     panel: 'bg-black/90 border border-emerald-500/60 shadow-[0_0_15px_rgba(16,185,129,0.2)] rounded-none',
@@ -70,7 +82,10 @@ export const THEMES = {
   vaporwave: {
     id: 'vaporwave',
     name: 'Vaporwave 80s VHS',
-    desc: 'Analog kaset hissi, neon fuşya-lavanta ışıltıları ve retro-wave.',
+    desc: {
+      tr: 'Analog kaset hissi, neon fuşya-lavanta ışıltıları ve retro-wave.',
+      en: 'Analog tape nostalgia, neon fuchsia-lavender glows, and retro wave.'
+    },
     bg: 'bg-[#120024]',
     textColor: 'text-fuchsia-200',
     panel: 'bg-[#220442]/85 border border-fuchsia-500/40 shadow-[0_0_25px_rgba(217,70,239,0.25)] rounded-2xl backdrop-blur-md',
@@ -87,7 +102,10 @@ export const THEMES = {
   frutiger_aero: {
     id: 'frutiger_aero',
     name: 'Frutiger Aero (Web 2.0)',
-    desc: '2000’lerin parlak jel butonları, canlı turkuaz suları ve cam yansımaları.',
+    desc: {
+      tr: '2000’lerin parlak jel butonları, canlı turkuaz suları ve cam yansımaları.',
+      en: '2000s glossy gel buttons, refreshing water, and crystal glass reflections.'
+    },
     bg: 'bg-gradient-to-br from-[#7dd3fc] via-[#38bdf8] to-[#0284c7]',
     textColor: 'text-slate-900',
     panel: 'bg-white/45 border border-white/70 shadow-[0_8px_32px_rgba(2,132,199,0.3)] rounded-3xl backdrop-blur-xl',
@@ -104,7 +122,10 @@ export const THEMES = {
   manga: {
     id: 'manga',
     name: 'Manga Sketchbook',
-    desc: 'Siyah-beyaz manga sayfaları, el çizimi mürekkep çizgileri ve çizgi roman panelleri.',
+    desc: {
+      tr: 'Siyah-beyaz manga sayfaları, el çizimi mürekkep çizgileri ve çizgi roman panelleri.',
+      en: 'Black-and-white manga screentones, inky sketches, and comic panels.'
+    },
     bg: 'bg-[#faf6eb]',
     textColor: 'text-black font-sans',
     panel: 'bg-white border-2 border-dashed border-black shadow-[4px_4px_0px_#000] rounded-xl',

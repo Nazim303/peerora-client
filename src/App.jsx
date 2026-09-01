@@ -860,6 +860,7 @@ export default function App() {
                 onLaserEmit={(point) => socket.emit('laser:point', point)}
                 userColor={userColor}
                 theme={currentTheme}
+                lang={lang}
               />
             </div>
 
@@ -916,6 +917,7 @@ export default function App() {
               userColor={userColor}
               theme={currentTheme}
               isMuted={isMuted}
+              lang={lang}
             />
           </div>
         </div>
@@ -931,6 +933,7 @@ export default function App() {
         onPlayNext={() => socket.emit('playlist:play_next')}
         isHost={roomData.isHost}
         theme={currentTheme}
+        lang={lang}
       />
 
       <PollModal
@@ -943,6 +946,7 @@ export default function App() {
         isHost={roomData.isHost}
         userId={socket.id}
         theme={currentTheme}
+        lang={lang}
       />
 
       <UserListModal
@@ -956,6 +960,7 @@ export default function App() {
         onKick={(targetId) => socket.emit('room:kick_user', { targetId })}
         theme={currentTheme}
         speakingUsers={speakingUsers}
+        lang={lang}
       />
 
       <SettingsModal
