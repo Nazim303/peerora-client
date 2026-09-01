@@ -20,88 +20,55 @@ import PollModal from './components/PollModal';
 import UserListModal from './components/UserListModal';
 import AboutModal from './components/AboutModal';
 import { THEMES } from './themeConfig';
+import { translations } from './locales/translations';
 import { 
   Radio, MonitorPlay, Square, Link2, Tv, Copy, Check, LogOut, 
   ListMusic, Crown, Settings, Users, BarChart2, Mic, MicOff, Dices, 
-  History, Play, Compass, Sparkles, Globe, Lock, Film, Flame, Star, Shuffle, Info
+  History, Play, Compass, Sparkles, Globe, Lock, Film, Info
 } from 'lucide-react';
 import './App.css';
 
 const AVATAR_LIST = ['🐱', '🐶', '🦊', '🐼', '🦁', '🤖', '👾', '🦄', '🐲', '🧙‍♂️', '🥷', '🧑‍🚀', '🧛', '👑', '⭐'];
 
-// Hazır Parti Şablonları
 const PARTY_PRESETS = [
   {
     id: 'cinema',
-    name: '🎬 Sinema Gecesi',
+    nameKey: 'cinemaPreset',
     theme: 'frutiger_aero',
     maxUsers: 6,
     media: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
-    title: '🍿 Sinema & Film Partisi'
+    title: '🍿 Cinema & Movie Night'
   },
   {
     id: 'anime',
-    name: '✨ Anime & Dizi',
+    nameKey: 'animePreset',
     theme: 'cyberpunk',
     maxUsers: 10,
     media: 'https://www.youtube.com/watch?v=kXYiU_JCYtU',
-    title: '🎌 Anime & Dizi Maratonu'
+    title: '🎌 Anime & Shows Marathon'
   },
   {
     id: 'lofi',
-    name: '🎧 Lo-Fi & Chill',
+    nameKey: 'lofiPreset',
     theme: 'vaporwave',
     maxUsers: 8,
     media: 'https://www.youtube.com/watch?v=jfKfPfyJRdk',
-    title: '☕ Chill Lo-Fi Dinleme Odası'
+    title: '☕ Chill Lo-Fi Lounge'
   }
 ];
 
-// Günün Özel Medya Havuzu
-const DAILY_SPECIAL_MEDIA = [
-  {
-    id: 'sp-1',
-    title: 'Lofi Girl - Synthwave & Chill Beats',
-    tag: 'Canlı Müzik / Odak',
-    desc: 'Birlikte ders çalışmak veya arka planda rahatlatıcı müzik dinlemek için 7/24 kesintisiz Lo-Fi akışı.',
-    url: 'https://www.youtube.com/watch?v=jfKfPfyJRdk',
-    cover: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=600&auto=format&fit=crop&q=80',
-    theme: 'vaporwave',
-    presetName: 'Lo-Fi Chill Gecesi'
-  },
-  {
-    id: 'sp-2',
-    title: 'Big Buck Bunny (4K Açık Kaynak Film)',
-    tag: 'Animasyon / Komedi',
-    desc: 'Blender Vakfı tarafından hazırlanan eğlenceli ve yüksek kaliteli kült 3D animasyon klasiği.',
-    url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
-    cover: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=600&auto=format&fit=crop&q=80',
-    theme: 'frutiger_aero',
-    presetName: 'Animasyon Sinema Saati'
-  },
-  {
-    id: 'sp-3',
-    title: 'Cyberpunk 2077 - Night City Ambience',
-    tag: 'Oyun / Atmosfer',
-    desc: 'Neon ışıkları altında yağmurlu Night City sokak manzaraları ve fütüristik atmosferik sesler.',
-    url: 'https://www.youtube.com/watch?v=4xDzrJKXOOY',
-    cover: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=600&auto=format&fit=crop&q=80',
-    theme: 'cyberpunk',
-    presetName: 'Cyberpunk Gece Seansı'
-  },
-  {
-    id: 'sp-4',
-    title: 'Tears of Steel (Sci-Fi Kısa Film)',
-    tag: 'Bilim Kurgu / Aksiyon',
-    desc: 'Geleceğin distopik dünyasında geçen görsel efekt ve hikaye dolu açık bilim kurgu başyapıtı.',
-    url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4',
-    cover: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=600&auto=format&fit=crop&q=80',
-    theme: 'matrix',
-    presetName: 'Sci-Fi Film Kulübü'
-  }
-];
+// Cihaz dili kontrolü (Türkçe ise 'tr', değilse 'en')
+const getInitialLanguage = () => {
+  const saved = localStorage.getItem('p2p_lang');
+  if (saved) return saved;
+  const browserLang = (navigator.language || navigator.userLanguage || '').toLowerCase();
+  return browserLang.startsWith('tr') ? 'tr' : 'en';
+};
 
 export default function App() {
+  const [lang, setLang] = useState(getInitialLanguage);
+  const t = translations[lang] || translations.tr;
+
   const [username, setUsername] = useState(() => localStorage.getItem('p2p_username') || '');
   const [avatar, setAvatar] = useState(() => localStorage.getItem('p2p_avatar') || '🐱');
   const [userColor, setUserColor] = useState(() => localStorage.getItem('p2p_userColor') || '#3b82f6');
@@ -111,7 +78,6 @@ export default function App() {
   const [isPublicRoom, setIsPublicRoom] = useState(true);
   const [roomTitleInput, setRoomTitleInput] = useState('');
 
-  const [dailyIndex, setDailyIndex] = useState(() => new Date().getDate() % DAILY_SPECIAL_MEDIA.length);
   const [lobbyTab, setLobbyTab] = useState('create');
   const [publicRooms, setPublicRooms] = useState([]);
 
@@ -162,7 +128,10 @@ export default function App() {
   const currentUserObj = roomUsers.find((u) => u.id === socket.id);
   const isMuted = currentUserObj?.isMuted || false;
 
-  const currentDailySpecial = DAILY_SPECIAL_MEDIA[dailyIndex];
+  const handleLanguageChange = (newLang) => {
+    setLang(newLang);
+    localStorage.setItem('p2p_lang', newLang);
+  };
 
   const saveRecentRoom = (id) => {
     const updated = [id, ...recentRooms.filter((r) => r !== id)].slice(0, 4);
@@ -174,19 +143,6 @@ export default function App() {
     const next = AVATAR_LIST[Math.floor(Math.random() * AVATAR_LIST.length)];
     setAvatar(next);
     localStorage.setItem('p2p_avatar', next);
-  };
-
-  const handleShuffleDailySpecial = () => {
-    setDailyIndex((prev) => (prev + 1) % DAILY_SPECIAL_MEDIA.length);
-  };
-
-  const handleLaunchWithSpecial = () => {
-    setInitialMediaUrl(currentDailySpecial.url);
-    setRoomTitleInput(currentDailySpecial.presetName);
-    if (THEMES[currentDailySpecial.theme]) {
-      setSelectedTheme(currentDailySpecial.theme);
-      localStorage.setItem('p2p_theme', currentDailySpecial.theme);
-    }
   };
 
   const handleApplyPreset = (preset) => {
@@ -384,9 +340,8 @@ export default function App() {
     }
   };
 
-// Oda kurucu için users state'ini dolduruyoruz
   const handleCreateRoom = () => {
-    if (!username.trim()) return alert('Lütfen bir isim girin.');
+    if (!username.trim()) return alert(t.enterNameAlert);
     localStorage.setItem('p2p_username', username.trim());
     localStorage.setItem('p2p_avatar', avatar);
 
@@ -402,7 +357,7 @@ export default function App() {
       if (res?.success) {
         setRoomData(res);
         saveRecentRoom(res.roomId);
-        if (res.users) setRoomUsers(res.users); // <-- Kurucu kişi hemen 1/X olarak atanır
+        if (res.users) setRoomUsers(res.users);
         if (res.mediaState) {
           setCurrentMedia({ type: res.mediaState.sourceType, url: res.mediaState.sourceUrl });
           setPlaybackState(res.mediaState);
@@ -413,7 +368,7 @@ export default function App() {
 
   const handleJoinRoom = (targetCode) => {
     const code = (targetCode || roomIdInput).trim();
-    if (!username.trim() || !code) return alert('İsim ve Oda Kodu zorunludur.');
+    if (!username.trim() || !code) return alert(t.enterNameAndCodeAlert);
     localStorage.setItem('p2p_username', username.trim());
     localStorage.setItem('p2p_avatar', avatar);
 
@@ -444,7 +399,7 @@ export default function App() {
   };
 
   const handleLeaveRoom = () => {
-    if (window.confirm(roomData?.isHost ? 'Odayı kapatmak istediğinize emin misiniz?' : 'Odadan ayrılmak istediğinize emin misiniz?')) {
+    if (window.confirm(roomData?.isHost ? t.closeRoomConfirm : t.leaveRoomConfirm)) {
       socket.emit('room:leave');
       resetRoomState();
     }
@@ -508,19 +463,19 @@ export default function App() {
           <button
             onClick={() => setIsAboutOpen(true)}
             className={`p-2.5 rounded-2xl cursor-pointer ${currentTheme.buttonSecondary} shadow-lg flex items-center gap-1.5 text-xs font-bold`}
-            title="Geliştirici & Proje Hakkında"
+            title={t.about}
           >
             <Info size={16} />
-            <span className="hidden sm:inline">Hakkında</span>
+            <span className="hidden sm:inline">{t.about}</span>
           </button>
 
           <button
             onClick={() => setIsSettingsOpen(true)}
             className={`p-2.5 rounded-2xl cursor-pointer ${currentTheme.buttonSecondary} shadow-lg flex items-center gap-2 text-xs font-bold`}
-            title="Ayarlar & Tema"
+            title={t.themeAndSettings}
           >
             <Settings size={16} />
-            <span className="hidden sm:inline">Tema & Ayarlar</span>
+            <span className="hidden sm:inline">{t.themeAndSettings}</span>
           </button>
         </div>
 
@@ -528,12 +483,12 @@ export default function App() {
           {/* Logo & Durum */}
           <div className="text-center space-y-1">
             <h1 className="text-2xl md:text-3xl font-black tracking-wider flex items-center justify-center gap-2">
-              <Radio size={28} /> Peerora
+              <Radio size={28} /> {t.appTitle}
             </h1>
-            <p className="text-xs opacity-70">Canlı Ekran & Senkronize Medya İzleme Platformu</p>
+            <p className="text-xs opacity-70">{t.appSubtitle}</p>
             <div className="flex items-center justify-center gap-1.5 pt-1">
               <span className={`w-2.5 h-2.5 rounded-full ${isConnected ? 'bg-emerald-500' : 'bg-rose-500'}`} />
-              <span className="text-[10px] opacity-80">{isConnected ? 'Sunucuya Bağlı' : 'Bağlantı Yok'}</span>
+              <span className="text-[10px] opacity-80">{isConnected ? t.serverConnected : t.serverDisconnected}</span>
             </div>
           </div>
 
@@ -543,62 +498,21 @@ export default function App() {
               type="button"
               onClick={getRandomAvatar}
               className="text-2xl p-2 rounded-2xl bg-black/10 border border-black/15 hover:scale-105 active:scale-95 transition-transform cursor-pointer relative"
-              title="Rastgele Avatar"
+              title="Avatar"
             >
               {avatar}
               <Dices size={12} className="absolute -bottom-1 -right-1 bg-blue-600 text-white p-0.5 rounded-full" />
             </button>
             <input
               type="text"
-              placeholder="Takma Adınız..."
+              placeholder={t.nicknamePlaceholder}
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               className={`flex-1 ${currentTheme.input} px-3.5 py-2.5 text-sm outline-none`}
             />
           </div>
 
-          {/* GÜNÜN ÖZEL MEDYASI (SPOTLIGHT KARTI) */}
-          <div className="relative overflow-hidden rounded-2xl border-2 border-black/15 bg-black/5 p-3 flex flex-col gap-2 shadow-sm">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5 text-xs font-black text-amber-500">
-                <Star size={14} fill="currentColor" />
-                <span className="tracking-wide">GÜNÜN ÖZEL MEDYASI</span>
-              </div>
-              <button
-                type="button"
-                onClick={handleShuffleDailySpecial}
-                className="text-[11px] font-bold opacity-75 hover:opacity-100 flex items-center gap-1 cursor-pointer hover:underline"
-                title="Başka Öneri Getir"
-              >
-                <Shuffle size={12} /> Başka Öneri
-              </button>
-            </div>
-
-            <div className="flex gap-3 items-center">
-              <img
-                src={currentDailySpecial.cover}
-                alt="Thumbnail"
-                className="w-20 h-14 object-cover rounded-xl border border-black/20 shadow-sm shrink-0"
-              />
-              <div className="flex flex-col truncate">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs font-black truncate">{currentDailySpecial.title}</span>
-                </div>
-                <span className="text-[10px] font-bold text-blue-500">{currentDailySpecial.tag}</span>
-                <span className="text-[10px] opacity-70 line-clamp-1">{currentDailySpecial.desc}</span>
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={handleLaunchWithSpecial}
-              className={`w-full py-1.5 rounded-xl text-xs font-bold cursor-pointer transition-all flex items-center justify-center gap-1.5 ${currentTheme.buttonSecondary}`}
-            >
-              <Flame size={13} fill="currentColor" /> Bu Medyayı Odaya Yükle
-            </button>
-          </div>
-
-          {/* Lobi Gezinme Sekmeleri: Oda Kur / Keşfet */}
+          {/* Lobi Gezinme Sekmeleri */}
           <div className="flex p-1 bg-black/10 rounded-2xl gap-1 text-xs font-bold">
             <button
               onClick={() => setLobbyTab('create')}
@@ -606,7 +520,7 @@ export default function App() {
                 lobbyTab === 'create' ? 'bg-blue-600 text-white shadow-md' : 'hover:bg-black/5 opacity-70'
               }`}
             >
-              <Sparkles size={14} /> Oda Oluştur
+              <Sparkles size={14} /> {t.createTab}
             </button>
             <button
               onClick={() => {
@@ -617,7 +531,7 @@ export default function App() {
                 lobbyTab === 'explore' ? 'bg-blue-600 text-white shadow-md' : 'hover:bg-black/5 opacity-70'
               }`}
             >
-              <Compass size={14} /> Açık Odalar ({publicRooms.length})
+              <Compass size={14} /> {t.exploreTab} ({publicRooms.length})
             </button>
           </div>
 
@@ -626,7 +540,7 @@ export default function App() {
             <div className="space-y-3.5">
               {/* Hazır Parti Şablonları */}
               <div>
-                <span className="text-[11px] font-bold opacity-75 mb-1.5 block">⚡ Hazır Parti Şablonları:</span>
+                <span className="text-[11px] font-bold opacity-75 mb-1.5 block">{t.presetsTitle}</span>
                 <div className="grid grid-cols-3 gap-1.5">
                   {PARTY_PRESETS.map((p) => (
                     <button
@@ -635,8 +549,8 @@ export default function App() {
                       onClick={() => handleApplyPreset(p)}
                       className="p-2 rounded-xl border border-black/10 bg-black/5 hover:bg-black/10 text-left transition-all cursor-pointer flex flex-col justify-between"
                     >
-                      <span className="text-xs font-bold truncate">{p.name}</span>
-                      <span className="text-[9px] opacity-65 truncate">{p.maxUsers} Kişi</span>
+                      <span className="text-xs font-bold truncate">{t[p.nameKey]}</span>
+                      <span className="text-[9px] opacity-65 truncate">{p.maxUsers} {t.peopleCount}</span>
                     </button>
                   ))}
                 </div>
@@ -646,7 +560,7 @@ export default function App() {
               <div className="flex gap-2">
                 <input
                   type="text"
-                  placeholder="Oda Başlığı (Örn: Korku Filmi Gecesi)..."
+                  placeholder={t.roomTitlePlaceholder}
                   value={roomTitleInput}
                   onChange={(e) => setRoomTitleInput(e.target.value)}
                   className={`flex-1 ${currentTheme.input} px-3 py-2 text-xs outline-none`}
@@ -657,21 +571,20 @@ export default function App() {
                   className={`px-3 py-2 rounded-xl text-xs font-bold border border-black/10 flex items-center gap-1 cursor-pointer transition-colors ${
                     isPublicRoom ? 'bg-emerald-500/20 text-emerald-600 border-emerald-500/40' : 'bg-black/10 opacity-70'
                   }`}
-                  title={isPublicRoom ? 'Oda lobide herkese görünür' : 'Yalnızca kodla girilebilir'}
                 >
                   {isPublicRoom ? <Globe size={13} /> : <Lock size={13} />}
-                  <span>{isPublicRoom ? 'Herkese Açık' : 'Gizli'}</span>
+                  <span>{isPublicRoom ? t.public : t.private}</span>
                 </button>
               </div>
 
               {/* Başlangıç Videosu Linki */}
               <div className="space-y-1">
                 <label className="text-[11px] font-bold opacity-80 flex items-center gap-1">
-                  <Play size={12} /> Başlangıç Videosu (İsteğe Bağlı):
+                  <Play size={12} /> {t.startVideoLabel}
                 </label>
                 <input
                   type="text"
-                  placeholder="YouTube, Twitch, Vimeo veya MP4 linki..."
+                  placeholder={t.videoPlaceholder}
                   value={initialMediaUrl}
                   onChange={(e) => setInitialMediaUrl(e.target.value)}
                   className={`w-full ${currentTheme.input} px-3 py-2 text-xs outline-none`}
@@ -680,7 +593,7 @@ export default function App() {
 
               {/* Kişi Limiti */}
               <div className="flex items-center justify-between px-1 text-xs font-bold opacity-85">
-                <span className="flex items-center gap-1.5"><Users size={14} /> Kişi Limiti:</span>
+                <span className="flex items-center gap-1.5"><Users size={14} /> {t.userLimit}</span>
                 <div className="flex items-center gap-1">
                   {[2, 4, 6, 8, 10].map((num) => (
                     <button
@@ -701,12 +614,12 @@ export default function App() {
                 onClick={handleCreateRoom}
                 className={`w-full ${currentTheme.buttonPrimary} py-2.5 text-sm font-black cursor-pointer shadow-lg`}
               >
-                Yeni Oda Oluştur ({maxUsersInput} Kişilik)
+                {t.createRoomBtn} ({maxUsersInput} {t.peopleCount})
               </button>
 
               <div className="flex items-center gap-2 text-xs opacity-50 my-1">
                 <div className="flex-1 h-px bg-current" />
-                <span>VEYA KODLA KATIL</span>
+                <span>{t.orJoinWithCode}</span>
                 <div className="flex-1 h-px bg-current" />
               </div>
 
@@ -714,7 +627,7 @@ export default function App() {
               <div className="flex gap-2">
                 <input
                   type="text"
-                  placeholder="6 Haneli Oda Kodu..."
+                  placeholder={t.roomCodePlaceholder}
                   value={roomIdInput}
                   onChange={(e) => setRoomIdInput(e.target.value)}
                   className={`flex-1 ${currentTheme.input} px-3 py-2 text-sm outline-none`}
@@ -723,7 +636,7 @@ export default function App() {
                   onClick={() => handleJoinRoom()}
                   className={`${currentTheme.buttonSecondary} px-4 py-2 text-sm font-black cursor-pointer`}
                 >
-                  Katıl
+                  {t.joinBtn}
                 </button>
               </div>
 
@@ -731,7 +644,7 @@ export default function App() {
               {recentRooms.length > 0 && (
                 <div className="pt-2 border-t border-black/10 space-y-1">
                   <span className="text-[11px] font-bold opacity-75 flex items-center gap-1">
-                    <History size={12} /> Son Katıldığın Odalar:
+                    <History size={12} /> {t.recentRooms}
                   </span>
                   <div className="flex flex-wrap gap-1.5">
                     {recentRooms.map((code) => (
@@ -753,7 +666,7 @@ export default function App() {
               {publicRooms.length === 0 ? (
                 <div className="text-center text-xs opacity-60 py-10 flex flex-col items-center gap-2">
                   <Film size={24} />
-                  <span>Şu anda açık oda bulunmuyor. İlk partiyi siz başlatın!</span>
+                  <span>{t.noPublicRooms}</span>
                 </div>
               ) : (
                 publicRooms.map((r) => (
@@ -765,7 +678,7 @@ export default function App() {
                       <span className="text-2xl p-1 bg-black/10 rounded-xl shrink-0">{r.hostAvatar}</span>
                       <div className="flex flex-col truncate">
                         <span className="text-xs font-bold truncate">{r.title}</span>
-                        <span className="text-[10px] opacity-70 truncate">Host: {r.hostName} • {r.mediaType !== 'NONE' ? r.mediaType : 'Beklemede'}</span>
+                        <span className="text-[10px] opacity-70 truncate">{t.host}: {r.hostName} • {r.mediaType !== 'NONE' ? r.mediaType : t.waiting}</span>
                       </div>
                     </div>
 
@@ -777,7 +690,7 @@ export default function App() {
                         onClick={() => handleJoinRoom(r.roomId)}
                         className={`${currentTheme.buttonPrimary} px-3 py-1.5 text-xs font-black rounded-xl cursor-pointer`}
                       >
-                        Katıl
+                        {t.joinBtn}
                       </button>
                     </div>
                   </div>
@@ -795,12 +708,15 @@ export default function App() {
           onColorChange={(col) => { setUserColor(col); localStorage.setItem('p2p_userColor', col); }}
           selectedTheme={selectedTheme}
           onThemeChange={(th) => { setSelectedTheme(th); localStorage.setItem('p2p_theme', th); }}
+          lang={lang}
+          onLangChange={handleLanguageChange}
         />
 
         <AboutModal
           isOpen={isAboutOpen}
           onClose={() => setIsAboutOpen(false)}
           theme={currentTheme}
+          lang={lang}
         />
       </div>
     );
@@ -823,14 +739,14 @@ export default function App() {
           ))}
         </div>
 
-      {/* Üst Bilgi Barı - Mobilde Taşmayan & Kaydırılabilir Tasarım */}
+        {/* Üst Bilgi Barı */}
         <div className={`flex items-center justify-between gap-2 ${currentTheme.headerPanel} px-2.5 py-1.5 md:px-5 md:py-2.5 shrink-0 shadow-md overflow-x-auto no-scrollbar w-full`}>
           <div className="flex items-center gap-1.5 shrink-0">
             <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse shrink-0" />
             <button
               onClick={handleCopyCode}
               className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-mono cursor-pointer shrink-0 ${currentTheme.badge}`}
-              title="Kodu Kopyala"
+              title={t.copyCode}
             >
               <span className="truncate max-w-[80px] sm:max-w-none">#{roomData.roomId}</span>
               {copied ? <Check size={13} className="text-emerald-300 shrink-0" /> : <Copy size={13} className="shrink-0" />}
@@ -856,10 +772,10 @@ export default function App() {
                 className={`p-2 rounded-xl cursor-pointer flex items-center gap-1 text-xs font-bold transition-all duration-100 shrink-0 ${
                   isMicEnabled ? 'bg-emerald-600 text-white' : currentTheme.buttonSecondary
                 }`}
-                title={isMicEnabled ? 'Sesli Sohbeti Kapat' : 'Sesli Sohbeti Başlat'}
+                title={isMicEnabled ? 'Kapat' : 'Aç'}
               >
                 <Mic size={15} />
-                <span className="hidden lg:inline">{isMicEnabled ? 'Mikrofon Açık' : 'Sese Katıl'}</span>
+                <span className="hidden lg:inline">{isMicEnabled ? t.micOn : t.joinVoice}</span>
               </button>
 
               {isMicEnabled && (
@@ -868,7 +784,6 @@ export default function App() {
                   className={`p-2 rounded-xl cursor-pointer transition-colors shrink-0 ${
                     isMicMuted ? 'bg-rose-600 text-white' : 'bg-black/20 text-gray-300'
                   }`}
-                  title={isMicMuted ? 'Kendi Sesini Aç' : 'Kendi Sesini Sustur'}
                 >
                   {isMicMuted ? <MicOff size={15} /> : <Mic size={15} />}
                 </button>
@@ -879,7 +794,7 @@ export default function App() {
             <button
               onClick={() => setIsPollOpen(true)}
               className={`p-2 rounded-xl cursor-pointer flex items-center gap-1 text-xs font-bold shrink-0 ${currentTheme.buttonSecondary}`}
-              title="Anket"
+              title={t.poll}
             >
               <BarChart2 size={15} />
               {poll && <span className="w-2 h-2 rounded-full bg-blue-500 animate-ping" />}
@@ -889,7 +804,7 @@ export default function App() {
             <button
               onClick={() => setIsPlaylistOpen(true)}
               className={`relative p-2 rounded-xl cursor-pointer flex items-center gap-1 text-xs font-bold shrink-0 ${currentTheme.buttonSecondary}`}
-              title="Oynatma Sırası"
+              title={t.playlist}
             >
               <ListMusic size={15} />
               {playlist.length > 0 && (
@@ -903,25 +818,24 @@ export default function App() {
             <button
               onClick={() => setIsAboutOpen(true)}
               className={`p-2 rounded-xl cursor-pointer flex items-center gap-1 text-xs font-bold shrink-0 ${currentTheme.buttonSecondary}`}
-              title="Geliştirici & Proje Hakkında"
+              title={t.about}
             >
               <Info size={15} />
             </button>
 
-            {/* Ayarlar (Artık Taşmaz ve Görünür) */}
+            {/* Ayarlar */}
             <button
               onClick={() => setIsSettingsOpen(true)}
               className={`p-2 rounded-xl cursor-pointer flex items-center gap-1 text-xs font-bold shrink-0 ${currentTheme.buttonSecondary}`}
-              title="Ayarlar & Tema"
+              title={t.themeAndSettings}
             >
               <Settings size={15} />
             </button>
 
-            {/* Çıkış Butonu */}
+            {/* Çıkış */}
             <button
               onClick={handleLeaveRoom}
               className="p-2 rounded-xl hover:bg-rose-500/20 text-rose-500 cursor-pointer transition-colors shrink-0"
-              title={roomData.isHost ? 'Odayı Kapat' : 'Odadan Ayrıl'}
             >
               <LogOut size={16} />
             </button>
@@ -960,11 +874,11 @@ export default function App() {
                 >
                   {isLiveStreamActive ? (
                     <>
-                      <Square size={14} fill="currentColor" /> Ekranı Durdur
+                      <Square size={14} fill="currentColor" /> {t.stopStream}
                     </>
                   ) : (
                     <>
-                      <MonitorPlay size={14} /> Ekran / Sekme Yayını
+                      <MonitorPlay size={14} /> {t.startStream}
                     </>
                   )}
                 </button>
@@ -972,7 +886,7 @@ export default function App() {
                 <div className="flex flex-1 gap-2">
                   <input
                     type="text"
-                    placeholder="YouTube, Twitch, Vimeo, MP4 URL..."
+                    placeholder={t.videoPlaceholder}
                     value={videoUrlInput}
                     onChange={(e) => setVideoUrlInput(e.target.value)}
                     className={`flex-1 ${currentTheme.input} text-xs px-3 py-2 outline-none`}
@@ -981,7 +895,7 @@ export default function App() {
                     onClick={handleLoadUrl}
                     className={`${currentTheme.buttonPrimary} px-4 py-2 text-xs font-black flex items-center gap-1.5 cursor-pointer shrink-0`}
                   >
-                    <Link2 size={14} /> Yükle
+                    <Link2 size={14} /> {t.loadBtn}
                   </button>
                 </div>
               </div>
@@ -1051,12 +965,15 @@ export default function App() {
         onColorChange={(col) => { setUserColor(col); localStorage.setItem('p2p_userColor', col); }}
         selectedTheme={selectedTheme}
         onThemeChange={(th) => { setSelectedTheme(th); localStorage.setItem('p2p_theme', th); }}
+        lang={lang}
+        onLangChange={handleLanguageChange}
       />
 
       <AboutModal
         isOpen={isAboutOpen}
         onClose={() => setIsAboutOpen(false)}
         theme={currentTheme}
+        lang={lang}
       />
     </div>
   );
