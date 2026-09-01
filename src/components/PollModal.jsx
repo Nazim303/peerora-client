@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { X, BarChart2, Plus, Trash2, CheckCircle2 } from 'lucide-react';
+import { translations } from '../locales/translations';
 
 export default function PollModal({ 
   isOpen, 
@@ -10,10 +11,13 @@ export default function PollModal({
   onEndPoll, 
   isHost, 
   userId, 
-  theme 
+  theme,
+  lang = 'tr'
 }) {
   const [question, setQuestion] = useState('');
   const [options, setOptions] = useState(['', '']);
+
+  const t = translations[lang] || translations.tr;
 
   if (!isOpen) return null;
 
@@ -34,7 +38,7 @@ export default function PollModal({
   const handleCreate = (e) => {
     e.preventDefault();
     const validOptions = options.map((o) => o.trim()).filter(Boolean);
-    if (!question.trim() || validOptions.length < 2) return alert('Soru ve en az 2 seçenek gereklidir.');
+    if (!question.trim() || validOptions.length < 2) return alert(t.pollValidationAlert);
 
     onCreatePoll({ question: question.trim(), options: validOptions });
     setQuestion('');
@@ -49,7 +53,7 @@ export default function PollModal({
         {/* Başlık */}
         <div className="flex items-center justify-between pb-3 border-b border-black/10">
           <div className="flex items-center gap-2 font-black text-sm">
-            <BarChart2 size={18} /> Oda İçi Anket
+            <BarChart2 size={18} /> {t.pollTitle}
           </div>
           <button onClick={onClose} className="cursor-pointer opacity-70 hover:opacity-100">
             <X size={18} />
@@ -93,14 +97,14 @@ export default function PollModal({
               })}
             </div>
 
-            <div className="text-[11px] opacity-70 text-right">Toplam Oy: {totalVotes}</div>
+            <div className="text-[11px] opacity-70 text-right">{t.totalVotesText}: {totalVotes}</div>
 
             {isHost && (
               <button
                 onClick={onEndPoll}
                 className="w-full bg-rose-600 hover:bg-rose-500 text-white py-2 rounded-xl text-xs font-black cursor-pointer shadow-md transition-all"
               >
-                Anketi Sonlandır
+                {t.endPollBtn}
               </button>
             )}
           </div>
@@ -109,19 +113,19 @@ export default function PollModal({
           <form onSubmit={handleCreate} className="space-y-3 my-3">
             <input
               type="text"
-              placeholder="Anket Sorusu (Örn: Sıradaki filme geçelim mi?)..."
+              placeholder={t.pollQuestionPlaceholder}
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
               className={`w-full ${theme.input} text-xs px-3 py-2 outline-none`}
             />
 
             <div className="space-y-2">
-              <label className="text-xs font-bold opacity-80">Seçenekler:</label>
+              <label className="text-xs font-bold opacity-80">{t.pollOptionsLabel}</label>
               {options.map((opt, i) => (
                 <div key={i} className="flex gap-1.5">
                   <input
                     type="text"
-                    placeholder={`Seçenek ${i + 1}`}
+                    placeholder={`${t.pollOptionPlaceholder} ${i + 1}`}
                     value={opt}
                     onChange={(e) => handleOptionChange(e.target.value, i)}
                     className={`flex-1 ${theme.input} text-xs px-3 py-1.5 outline-none`}
@@ -145,7 +149,7 @@ export default function PollModal({
                 onClick={handleAddOption}
                 className="text-xs font-bold text-blue-500 flex items-center gap-1 cursor-pointer hover:underline"
               >
-                <Plus size={13} /> Seçenek Ekle
+                <Plus size={13} /> {t.addOptionBtn}
               </button>
             )}
 
@@ -153,7 +157,7 @@ export default function PollModal({
               type="submit"
               className={`w-full ${theme.buttonPrimary} py-2 text-xs font-black cursor-pointer shadow-lg`}
             >
-              Anketi Başlat
+              {t.startPollBtn}
             </button>
           </form>
         )}

@@ -748,7 +748,7 @@ export default function App() {
               className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-mono cursor-pointer shrink-0 ${currentTheme.badge}`}
               title={t.copyCode}
             >
-              <span className="truncate max-w-[80px] sm:max-w-none">#{roomData.roomId}</span>
+            <span className="truncate max-w-20 sm:max-w-none">#{roomData.roomId}</span>
               {copied ? <Check size={13} className="text-emerald-300 shrink-0" /> : <Copy size={13} className="shrink-0" />}
             </button>
 
@@ -925,29 +925,29 @@ export default function App() {
 
       {/* Oda Modalları */}
       <PlaylistModal
-        isOpen={isPlaylistOpen}
-        onClose={() => setIsPlaylistOpen(false)}
-        playlist={playlist}
-        onAddToPlaylist={(item) => { setPlaylist((prev) => [...prev, item]); socket.emit('playlist:add', item); }}
-        onRemoveFromPlaylist={(itemId) => { setPlaylist((prev) => prev.filter((i) => i.id !== itemId)); socket.emit('playlist:remove', { itemId }); }}
-        onPlayNext={() => socket.emit('playlist:play_next')}
-        isHost={roomData.isHost}
-        theme={currentTheme}
-        lang={lang}
-      />
+  isOpen={isPlaylistOpen}
+  onClose={() => setIsPlaylistOpen(false)}
+  playlist={playlist}
+  onAddToPlaylist={(item) => { setPlaylist((prev) => [...prev, item]); socket.emit('playlist:add', item); }}
+  onRemoveFromPlaylist={(itemId) => { setPlaylist((prev) => prev.filter((i) => i.id !== itemId)); socket.emit('playlist:remove', { itemId }); }}
+  onPlayNext={() => socket.emit('playlist:play_next')}
+  isHost={roomData.isHost}
+  theme={currentTheme}
+  lang={lang}
+/>
 
-      <PollModal
-        isOpen={isPollOpen}
-        onClose={() => setIsPollOpen(false)}
-        poll={poll}
-        onCreatePoll={(pollData) => socket.emit('poll:create', pollData)}
-        onVote={(optionId) => socket.emit('poll:vote', { optionId })}
-        onEndPoll={() => socket.emit('poll:end')}
-        isHost={roomData.isHost}
-        userId={socket.id}
-        theme={currentTheme}
-        lang={lang}
-      />
+ <PollModal
+  isOpen={isPollOpen}
+  onClose={() => setIsPollOpen(false)}
+  poll={poll}
+  onCreatePoll={(pollData) => socket.emit('poll:create', pollData)}
+  onVote={(optionId) => socket.emit('poll:vote', { optionId })}
+  onEndPoll={() => socket.emit('poll:end')}
+  isHost={roomData.isHost}
+  userId={socket.id}
+  theme={currentTheme}
+  lang={lang}
+/>
 
       <UserListModal
         isOpen={isUserListOpen}

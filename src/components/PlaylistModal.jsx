@@ -1,18 +1,6 @@
 import React, { useState } from 'react';
 import { X, Plus, Trash2, Play, ListMusic, Loader2 } from 'lucide-react';
-
-function extractTitleFromUrl(url) {
-  if (!url) return '';
-  const isYt = url.includes('youtube.com') || url.includes('youtu.be');
-  if (isYt) {
-    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
-    const match = url.match(regExp);
-    const id = match && match[2].length === 11 ? match[2] : '';
-    return id ? `YouTube Videosu (${id})` : 'YouTube Videosu';
-  }
-  const cleanName = url.split('/').pop().split('#')[0].split('?')[0];
-  return cleanName ? decodeURIComponent(cleanName) : 'Web Video Akışı';
-}
+import { translations } from '../locales/translations';
 
 export default function PlaylistModal({ 
   isOpen, 
@@ -22,13 +10,29 @@ export default function PlaylistModal({
   onRemoveFromPlaylist, 
   onPlayNext, 
   isHost,
-  theme
+  theme,
+  lang = 'tr'
 }) {
   const [urlInput, setUrlInput] = useState('');
   const [titleInput, setTitleInput] = useState('');
   const [isLoadingTitle, setIsLoadingTitle] = useState(false);
 
+  const t = translations[lang] || translations.tr;
+
   if (!isOpen) return null;
+
+  const extractTitleFromUrl = (url) => {
+    if (!url) return '';
+    const isYt = url.includes('youtube.com') || url.includes('youtu.be');
+    if (isYt) {
+      const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+      const match = url.match(regExp);
+      const id = match && match[2].length === 11 ? match[2] : '';
+      return id ? `${t.defaultYtTitle} (${id})` : t.defaultYtTitle;
+    }
+    const cleanName = url.split('/').pop().split('#')[0].split('?')[0];
+    return cleanName ? decodeURIComponent(cleanName) : t.defaultWebTitle;
+  };
 
   const handleUrlChange = async (url) => {
     setUrlInput(url);
@@ -76,7 +80,7 @@ export default function PlaylistModal({
         {/* Başlık */}
         <div className="flex items-center justify-between pb-3 border-b border-black/10">
           <div className="flex items-center gap-2 font-black text-sm">
-            <ListMusic size={18} /> Oynatma Sırası ({playlist.length})
+            <ListMusic size={18} /> {t.queueTitle} ({playlist.length})
           </div>
           <button onClick={onClose} className="cursor-pointer opacity-70 hover:opacity-100">
             <X size={18} />
@@ -88,7 +92,7 @@ export default function PlaylistModal({
           <div className="flex gap-2">
             <input
               type="text"
-              placeholder="YouTube veya MP4 URL..."
+              placeholder={t.videoUrlInputPlaceholder}
               value={urlInput}
               onChange={(e) => handleUrlChange(e.target.value)}
               className={`flex-1 ${theme.input} text-xs px-3 py-2 outline-none`}
@@ -97,14 +101,14 @@ export default function PlaylistModal({
               type="submit"
               className={`${theme.buttonPrimary} px-3 py-2 text-xs font-bold flex items-center gap-1 cursor-pointer`}
             >
-              <Plus size={14} /> Ekle
+              <Plus size={14} /> {t.addMediaBtn}
             </button>
           </div>
 
           <div className="relative">
             <input
               type="text"
-              placeholder="Video Başlığı (Otomatik algılanır)..."
+              placeholder={t.videoTitleInputPlaceholder}
               value={titleInput}
               onChange={(e) => setTitleInput(e.target.value)}
               className={`w-full ${theme.input} text-xs px-3 py-2 outline-none pr-8`}
@@ -119,7 +123,7 @@ export default function PlaylistModal({
             onClick={onPlayNext}
             className={`w-full mb-3 ${theme.buttonPrimary} py-2 text-xs font-black flex items-center justify-center gap-1.5 cursor-pointer shadow-lg`}
           >
-            <Play size={14} fill="currentColor" /> Sıradaki Videoyu Başlat
+            <Play size={14} fill="currentColor" /> {t.playNextBtn}
           </button>
         )}
 
@@ -127,7 +131,7 @@ export default function PlaylistModal({
         <div className="flex-1 overflow-y-auto space-y-2 pr-1">
           {playlist.length === 0 ? (
             <div className="text-center text-xs opacity-60 py-8">
-              Sırada video yok. İstediğiniz bir videoyu yukarıdan ekleyin!
+              {t.emptyQueueMsg}
             </div>
           ) : (
             playlist.map((item, idx) => (
@@ -147,7 +151,7 @@ export default function PlaylistModal({
                   <button
                     onClick={() => onRemoveFromPlaylist(item.id)}
                     className="p-1.5 rounded-lg hover:bg-rose-500/20 text-rose-500 cursor-pointer"
-                    title="Sıradan Kaldır"
+                    title={t.removeFromQueueTitle}
                   >
                     <Trash2 size={14} />
                   </button>
