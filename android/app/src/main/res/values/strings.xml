@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Peerora</string>
+    <string name="title_activity_main">Peerora</string>
+    <string name="package_name">com.theosdev.peerora</string>
+    <string name="custom_url_scheme">com.theosdev.peerora</string>
+</resources>

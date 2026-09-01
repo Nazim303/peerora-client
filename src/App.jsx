@@ -384,6 +384,7 @@ export default function App() {
     }
   };
 
+// Oda kurucu için users state'ini dolduruyoruz
   const handleCreateRoom = () => {
     if (!username.trim()) return alert('Lütfen bir isim girin.');
     localStorage.setItem('p2p_username', username.trim());
@@ -401,6 +402,7 @@ export default function App() {
       if (res?.success) {
         setRoomData(res);
         saveRecentRoom(res.roomId);
+        if (res.users) setRoomUsers(res.users); // <-- Kurucu kişi hemen 1/X olarak atanır
         if (res.mediaState) {
           setCurrentMedia({ type: res.mediaState.sourceType, url: res.mediaState.sourceUrl });
           setPlaybackState(res.mediaState);
@@ -821,54 +823,54 @@ export default function App() {
           ))}
         </div>
 
-        {/* Üst Bilgi Barı */}
-        <div className={`flex items-center justify-between ${currentTheme.headerPanel} px-3.5 py-2 md:px-5 md:py-2.5 shrink-0 shadow-md`}>
-          <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 bg-emerald-400 rounded-full animate-pulse" />
+      {/* Üst Bilgi Barı - Mobilde Taşmayan & Kaydırılabilir Tasarım */}
+        <div className={`flex items-center justify-between gap-2 ${currentTheme.headerPanel} px-2.5 py-1.5 md:px-5 md:py-2.5 shrink-0 shadow-md overflow-x-auto no-scrollbar w-full`}>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse shrink-0" />
             <button
               onClick={handleCopyCode}
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs md:text-sm font-mono cursor-pointer ${currentTheme.badge}`}
+              className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-mono cursor-pointer shrink-0 ${currentTheme.badge}`}
               title="Kodu Kopyala"
             >
-              <span>Oda: {roomData.roomId}</span>
-              {copied ? <Check size={14} className="text-emerald-300" /> : <Copy size={14} />}
+              <span className="truncate max-w-[80px] sm:max-w-none">#{roomData.roomId}</span>
+              {copied ? <Check size={13} className="text-emerald-300 shrink-0" /> : <Copy size={13} className="shrink-0" />}
             </button>
 
             <button
               onClick={() => setIsUserListOpen(true)}
-              className="flex items-center gap-1 text-xs font-bold opacity-85 hover:opacity-100 cursor-pointer px-2 py-1 rounded-lg bg-black/10 transition-all"
+              className="flex items-center gap-1 text-xs font-bold opacity-85 hover:opacity-100 cursor-pointer px-2 py-1 rounded-lg bg-black/10 transition-all shrink-0"
             >
-              <Users size={14} /> {roomUsers.length}/{roomData.maxUsers || 10}
+              <Users size={13} /> {roomUsers.length}/{roomData.maxUsers || 10}
             </button>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 shrink-0">
             {/* Mikrofon */}
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1 shrink-0">
               <button
                 onClick={handleToggleVoice}
                 style={{
                   transform: isMicEnabled && !isMicMuted ? `scale(${1 + myVoiceVolume * 0.35})` : 'scale(1)',
                   boxShadow: isMicEnabled && !isMicMuted && myVoiceVolume > 0.15 ? `0 0 ${myVoiceVolume * 22}px #10b981` : 'none'
                 }}
-                className={`p-2 rounded-xl cursor-pointer flex items-center gap-1.5 text-xs font-bold transition-all duration-100 ${
+                className={`p-2 rounded-xl cursor-pointer flex items-center gap-1 text-xs font-bold transition-all duration-100 shrink-0 ${
                   isMicEnabled ? 'bg-emerald-600 text-white' : currentTheme.buttonSecondary
                 }`}
                 title={isMicEnabled ? 'Sesli Sohbeti Kapat' : 'Sesli Sohbeti Başlat'}
               >
-                <Mic size={16} />
-                <span className="hidden md:inline">{isMicEnabled ? 'Mikrofon Açık' : 'Sese Katıl'}</span>
+                <Mic size={15} />
+                <span className="hidden lg:inline">{isMicEnabled ? 'Mikrofon Açık' : 'Sese Katıl'}</span>
               </button>
 
               {isMicEnabled && (
                 <button
                   onClick={() => { const next = !isMicMuted; setIsMicMuted(next); toggleVoiceMute(next); }}
-                  className={`p-2 rounded-xl cursor-pointer transition-colors ${
+                  className={`p-2 rounded-xl cursor-pointer transition-colors shrink-0 ${
                     isMicMuted ? 'bg-rose-600 text-white' : 'bg-black/20 text-gray-300'
                   }`}
                   title={isMicMuted ? 'Kendi Sesini Aç' : 'Kendi Sesini Sustur'}
                 >
-                  {isMicMuted ? <MicOff size={16} /> : <Mic size={16} />}
+                  {isMicMuted ? <MicOff size={15} /> : <Mic size={15} />}
                 </button>
               )}
             </div>
@@ -876,56 +878,52 @@ export default function App() {
             {/* Anket */}
             <button
               onClick={() => setIsPollOpen(true)}
-              className={`p-2 rounded-xl cursor-pointer flex items-center gap-1.5 text-xs font-bold ${currentTheme.buttonSecondary}`}
+              className={`p-2 rounded-xl cursor-pointer flex items-center gap-1 text-xs font-bold shrink-0 ${currentTheme.buttonSecondary}`}
               title="Anket"
             >
-              <BarChart2 size={16} />
+              <BarChart2 size={15} />
               {poll && <span className="w-2 h-2 rounded-full bg-blue-500 animate-ping" />}
             </button>
 
             {/* Playlist */}
             <button
               onClick={() => setIsPlaylistOpen(true)}
-              className={`relative p-2 rounded-xl cursor-pointer flex items-center gap-1.5 text-xs font-bold ${currentTheme.buttonSecondary}`}
+              className={`relative p-2 rounded-xl cursor-pointer flex items-center gap-1 text-xs font-bold shrink-0 ${currentTheme.buttonSecondary}`}
               title="Oynatma Sırası"
             >
-              <ListMusic size={16} />
+              <ListMusic size={15} />
               {playlist.length > 0 && (
-                <span className="bg-red-500 text-white rounded-full w-4 h-4 text-[10px] flex items-center justify-center font-bold">
+                <span className="bg-red-500 text-white rounded-full w-3.5 h-3.5 text-[9px] flex items-center justify-center font-bold">
                   {playlist.length}
                 </span>
               )}
             </button>
 
-            {/* Hakkında Butonu */}
+            {/* Hakkında */}
             <button
               onClick={() => setIsAboutOpen(true)}
-              className={`p-2 rounded-xl cursor-pointer flex items-center gap-1.5 text-xs font-bold ${currentTheme.buttonSecondary}`}
+              className={`p-2 rounded-xl cursor-pointer flex items-center gap-1 text-xs font-bold shrink-0 ${currentTheme.buttonSecondary}`}
               title="Geliştirici & Proje Hakkında"
             >
-              <Info size={16} />
+              <Info size={15} />
             </button>
 
-            {/* Ayarlar */}
+            {/* Ayarlar (Artık Taşmaz ve Görünür) */}
             <button
               onClick={() => setIsSettingsOpen(true)}
-              className={`p-2 rounded-xl cursor-pointer flex items-center gap-1.5 text-xs font-bold ${currentTheme.buttonSecondary}`}
+              className={`p-2 rounded-xl cursor-pointer flex items-center gap-1 text-xs font-bold shrink-0 ${currentTheme.buttonSecondary}`}
               title="Ayarlar & Tema"
             >
-              <Settings size={16} />
+              <Settings size={15} />
             </button>
 
-            <span className={`text-xs px-3 py-1.5 rounded-xl font-bold flex items-center gap-1.5 ${currentTheme.badge}`}>
-              {isLiveStreamActive && <Tv size={13} className="text-rose-400 animate-pulse" />}
-              {roomData.isHost ? 'Host' : 'Guest'}
-            </span>
-
+            {/* Çıkış Butonu */}
             <button
               onClick={handleLeaveRoom}
-              className="p-2 rounded-xl hover:bg-rose-500/20 text-rose-500 cursor-pointer transition-colors"
+              className="p-2 rounded-xl hover:bg-rose-500/20 text-rose-500 cursor-pointer transition-colors shrink-0"
               title={roomData.isHost ? 'Odayı Kapat' : 'Odadan Ayrıl'}
             >
-              <LogOut size={17} />
+              <LogOut size={16} />
             </button>
           </div>
         </div>

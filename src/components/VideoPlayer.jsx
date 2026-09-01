@@ -678,28 +678,27 @@ export default function VideoPlayer({
           )}
         </div>
 
-        {/* SAĞ GRUP (Bağımsız Yerel Ses + Altyazı + Çözünürlük + Tam Ekran) */}
-        <div className="flex items-center gap-2 pointer-events-auto">
-          {/* Yerel Ses Kontrolü (Host Kendi Sesini Kapatsa da Misafir Etkilenmez) */}
-          <div className="flex items-center gap-1.5 bg-black/75 backdrop-blur-md px-2.5 py-1.5 rounded-xl border border-white/10 shadow-lg text-white">
+  {/* Sağ / Ses & Kalite & Tam Ekran */}
+  <div className="flex items-center gap-1.5 pointer-events-auto shrink-0">
+    {/* Ses Slider (Mobilde Daraltılmış) */}
+<div className="flex items-center gap-1 bg-black/75 backdrop-blur-md border border-white/10 px-2 py-1.5 rounded-xl shadow-lg">
             <button
               onClick={handleToggleMute}
               className="text-gray-300 hover:text-white cursor-pointer"
               title={isLocalMuted ? 'Sesi Aç' : 'Sesi Kapat'}
             >
-              {isLocalMuted || localVolume === 0 ? <VolumeX size={15} className="text-rose-400" /> : <Volume2 size={15} />}
+              {isLocalMuted || localVolume === 0 ? <VolumeX size={15} /> : <Volume2 size={15} />}
             </button>
             <input
               type="range"
               min="0"
               max="100"
+              step="5"
               value={isLocalMuted ? 0 : localVolume}
-              onChange={(e) => handleVolumeChange(Number(e.target.value))}
-              className="w-16 h-1 bg-white/30 rounded-lg appearance-none cursor-pointer accent-blue-500"
-              title="Kişisel Ses Seviyesi"
+              onChange={(e) => handleVolumeChange(parseInt(e.target.value, 10))}
+              className="w-10 sm:w-16 accent-blue-500 cursor-pointer h-1 bg-white/20 rounded-lg"
             />
           </div>
-
           {/* Bağımsız Altyazı (CC) */}
           <button
             onClick={handleToggleCc}
