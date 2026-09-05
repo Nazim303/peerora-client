@@ -13,6 +13,7 @@ export default function ChatOverlay({
   danmakuEnabled, 
   onToggleDanmaku,
   currentUsername,
+  currentUserId, // <-- Eklendi
   userColor,
   theme,
   isMuted,
@@ -92,24 +93,29 @@ export default function ChatOverlay({
 
       {/* Mesaj Akışı */}
       <div className="flex-1 overflow-y-auto space-y-2.5 mb-2 pr-1">
-        {messages.length === 0 ? (
+       {messages.length === 0 ? (
           <div className="text-xs opacity-60 text-center mt-6">{t.chatEmpty}</div>
         ) : (
           messages.map((m) => {
-            const isMe = m.sender === currentUsername;
+            const isBot = m.senderId === 'system' || m.sender.includes('Bot');
+            // Soket ID'sine göre kesin kıyaslama (Aynı isimli test sekmeleri karışmaz)
+            const isMe = !isBot && (m.senderId ? m.senderId === currentUserId : m.sender === currentUsername);
+
             return (
-              <div key={m.id} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
+              <div key={m.id} className={`flex flex-col ${isBot ? 'items-center my-1' : isMe ? 'items-end' : 'items-start'}`}>
                 <span 
-                  className="text-[10px] font-bold mb-0.5 px-1"
-                  style={{ color: m.color || (isMe ? '#3b82f6' : '#8b5cf6') }}
+                  className={`text-[10px] font-bold mb-0.5 px-1 ${isBot ? 'text-emerald-500' : ''}`}
+                  style={{ color: !isBot ? (m.color || (isMe ? '#3b82f6' : '#8b5cf6')) : undefined }}
                 >
-                  {isMe ? t.you : m.sender}
+                  {isBot ? m.sender : isMe ? t.you : m.sender}
                 </span>
 
                 {m.type === 'GIF' ? (
                   <img src={m.text} alt="GIF" className="rounded-xl max-w-35 max-h-25 object-cover shadow-md border-2 border-black/20" />
                 ) : (
-                  <div className={`max-w-[80%] px-3.5 py-2 text-xs leading-relaxed wrap-break-word ${isMe ? theme.chatMe : theme.chatOther}`}>
+                  <div className={`max-w-[85%] px-3 py-1.5 text-xs leading-relaxed wrap-break-word ${
+                    isBot ? 'bg-emerald-500/15 text-emerald-800 border border-emerald-500/30 text-center font-bold' : isMe ? theme.chatMe : theme.chatOther
+                  }`}>
                     {m.text}
                   </div>
                 )}

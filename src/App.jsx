@@ -9,7 +9,8 @@ import {
   startVoiceChat,
   sendVoiceOffer,
   toggleVoiceMute,
-  stopVoiceChat
+  stopVoiceChat,
+  startLocalFileShare
 } from './services/webrtc';
 import { attachAudioVolumeMonitor } from './services/audioVisualizer';
 import VideoPlayer from './components/VideoPlayer';
@@ -19,12 +20,16 @@ import SettingsModal from './components/SettingsModal';
 import PollModal from './components/PollModal';
 import UserListModal from './components/UserListModal';
 import AboutModal from './components/AboutModal';
+import GameModal from './components/GameModal';
+import GameStage from './components/GameStage';
+import ChangelogModal from './components/ChangelogModal';
 import { THEMES } from './themeConfig';
 import { translations } from './locales/translations';
 import { 
   Radio, MonitorPlay, Square, Link2, Tv, Copy, Check, LogOut, 
   ListMusic, Crown, Settings, Users, BarChart2, Mic, MicOff, Dices, 
-  History, Play, Compass, Sparkles, Globe, Lock, Film, Info
+  History, Play, Compass, Sparkles, Globe, Lock, Film, Info, FileVideo,
+  X, AlertTriangle, Gamepad2
 } from 'lucide-react';
 import './App.css';
 
@@ -57,7 +62,6 @@ const PARTY_PRESETS = [
   }
 ];
 
-// Cihaz dili kontrolü (Türkçe ise 'tr', değilse 'en')
 const getInitialLanguage = () => {
   const saved = localStorage.getItem('p2p_lang');
   if (saved) return saved;
@@ -65,8 +69,16 @@ const getInitialLanguage = () => {
   return browserLang.startsWith('tr') ? 'tr' : 'en';
 };
 
+const isDesktopPlatform = () => {
+  if (typeof window === 'undefined') return false;
+  const isMobileDevice = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  const hasScreenShareApi = !!navigator.mediaDevices?.getDisplayMedia;
+  return !isMobileDevice && hasScreenShareApi;
+};
+
 export default function App() {
   const [lang, setLang] = useState(getInitialLanguage);
+  const [canShareScreen] = useState(isDesktopPlatform);
   const t = translations[lang] || translations.tr;
 
   const [username, setUsername] = useState(() => localStorage.getItem('p2p_username') || '');
@@ -77,6 +89,22 @@ export default function App() {
   const [initialMediaUrl, setInitialMediaUrl] = useState('');
   const [isPublicRoom, setIsPublicRoom] = useState(true);
   const [roomTitleInput, setRoomTitleInput] = useState('');
+
+  const fileInputRef = useRef(null);
+  const [localVideoUrl, setLocalVideoUrl] = useState(null);
+  const [mkvWarning, setMkvWarning] = useState(false);
+  const [isChangelogOpen, setIsChangelogOpen] = useState(false);
+
+  // Mini Oyun Durumları
+  const [isGameModalOpen, setIsGameModalOpen] = useState(false);
+  const [activeGame, setActiveGame] = useState(null);
+
+  const cleanupLocalVideo = () => {
+    if (localVideoUrl) {
+      URL.revokeObjectURL(localVideoUrl);
+      setLocalVideoUrl(null);
+    }
+  };
 
   const [lobbyTab, setLobbyTab] = useState('create');
   const [publicRooms, setPublicRooms] = useState([]);
@@ -117,7 +145,7 @@ export default function App() {
   const [typingUser, setTypingUser] = useState(null);
   const [danmakuEnabled, setDanmakuEnabled] = useState(true);
   const [danmakuList, setDanmakuList] = useState([]);
-  const [isConnected, setIsConnected] = useState(socket.connected);
+  const [connectionStatus, setConnectionStatus] = useState(socket.connected ? 'connected' : 'connecting');
   const [copied, setCopied] = useState(false);
 
   const laserPointsRef = useRef([]);
@@ -131,6 +159,11 @@ export default function App() {
   const handleLanguageChange = (newLang) => {
     setLang(newLang);
     localStorage.setItem('p2p_lang', newLang);
+  };
+
+  const handleEndGame = () => {
+    setActiveGame(null);
+    socket.emit('game:end');
   };
 
   const saveRecentRoom = (id) => {
@@ -158,9 +191,11 @@ export default function App() {
   const resetRoomState = (alertMsg) => {
     stopScreenShare();
     stopVoiceChat();
+    cleanupLocalVideo();
     setActiveStream(null);
     setIsLiveStreamActive(false);
     setIsMicEnabled(false);
+    setActiveGame(null);
     setCurrentMedia({ type: 'NONE', url: '' });
     setPlaybackState(null);
     setMessages([]);
@@ -173,18 +208,44 @@ export default function App() {
 
   useEffect(() => {
     const onConnect = () => {
-      setIsConnected(true);
+      setConnectionStatus('connected');
       socket.emit('rooms:get_public', (list) => setPublicRooms(list));
     };
-    const onDisconnect = () => setIsConnected(false);
+
+    const onDisconnect = () => {
+      if (!navigator.onLine) {
+        setConnectionStatus('disconnected');
+      } else {
+        setConnectionStatus('connecting');
+      }
+    };
+
+    const onConnectError = () => {
+      if (!navigator.onLine) {
+        setConnectionStatus('disconnected');
+      } else {
+        setConnectionStatus('connecting');
+      }
+    };
+
+    window.addEventListener('offline', () => setConnectionStatus('disconnected'));
+    window.addEventListener('online', () => {
+      setConnectionStatus('connecting');
+      socket.connect();
+    });
 
     socket.on('connect', onConnect);
     socket.on('disconnect', onDisconnect);
+    socket.on('connect_error', onConnectError);
 
-    socket.on('rooms:public_list', (list) => {
-      setPublicRooms(list);
-    });
-
+    if (!socket.connected) {
+      setConnectionStatus(navigator.onLine ? 'connecting' : 'disconnected');
+      socket.connect();
+    } else {
+      setConnectionStatus('connected');
+      socket.emit('rooms:get_public', (list) => setPublicRooms(list));
+    }
+    
     socket.on('room:closed', ({ message }) => resetRoomState(message));
     socket.on('room:kicked', () => resetRoomState('Oda yöneticisi tarafından çıkarıldınız.'));
 
@@ -239,6 +300,7 @@ export default function App() {
     });
 
     socket.on('media:change_source', (payload) => {
+      setActiveGame(null);
       if (payload.type === 'LIVE_STREAM') {
         setIsLiveStreamActive(true);
       } else {
@@ -284,12 +346,22 @@ export default function App() {
       }, 2400);
     });
 
-    if (!socket.connected) socket.connect();
-    else socket.emit('rooms:get_public', (list) => setPublicRooms(list));
+    socket.on('game:started', (gameData) => {
+      stopScreenShare();
+      cleanupLocalVideo();
+      setActiveStream(null);
+      setIsLiveStreamActive(false);
+      setActiveGame(gameData);
+    });
+
+    socket.on('game:ended', () => {
+      setActiveGame(null);
+    });
 
     return () => {
       socket.off('connect');
       socket.off('disconnect');
+      socket.off('connect_error');
       socket.off('rooms:public_list');
       socket.off('room:closed');
       socket.off('room:kicked');
@@ -306,6 +378,8 @@ export default function App() {
       socket.off('chat:message');
       socket.off('chat:typing');
       socket.off('chat:reaction');
+      socket.off('game:started');
+      socket.off('game:ended');
     };
   }, [isMicEnabled]);
 
@@ -379,6 +453,7 @@ export default function App() {
         if (res.users) setRoomUsers(res.users);
         if (res.playlist) setPlaylist(res.playlist);
         if (res.poll) setPoll(res.poll);
+        if (res.game) setActiveGame(res.game);
         if (res.mediaState?.sourceType === 'LIVE_STREAM') {
           setIsLiveStreamActive(true);
         } else if (res.mediaState) {
@@ -406,12 +481,19 @@ export default function App() {
   };
 
   const handleToggleStream = async () => {
-    if (isLiveStreamActive) {
+    if (activeGame) {
+      setActiveGame(null);
+      socket.emit('game:end');
+    }
+
+    if (isLiveStreamActive || localVideoUrl) {
       stopScreenShare();
+      cleanupLocalVideo();
       setActiveStream(null);
       setIsLiveStreamActive(false);
       socket.emit('media:change_source', { type: 'NONE', url: '' });
     } else {
+      cleanupLocalVideo();
       try {
         await startScreenShare(
           (localStream) => {
@@ -430,8 +512,15 @@ export default function App() {
 
   const handleLoadUrl = () => {
     if (!videoUrlInput.trim()) return;
-    if (isLiveStreamActive) {
+
+    if (activeGame) {
+      setActiveGame(null);
+      socket.emit('game:end');
+    }
+
+    if (isLiveStreamActive || localVideoUrl) {
       stopScreenShare();
+      cleanupLocalVideo();
       setActiveStream(null);
       setIsLiveStreamActive(false);
     }
@@ -439,6 +528,39 @@ export default function App() {
     setCurrentMedia(mediaPayload);
     socket.emit('media:change_source', mediaPayload);
     setVideoUrlInput('');
+  };
+
+  const handleLocalFileSelect = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (activeGame) {
+      setActiveGame(null);
+      socket.emit('game:end');
+    }
+
+    stopScreenShare();
+    cleanupLocalVideo();
+    setActiveStream(null);
+    setIsLiveStreamActive(false);
+
+    if (file.name.toLowerCase().endsWith('.mkv')) {
+      setMkvWarning(true);
+      setTimeout(() => setMkvWarning(false), 7000);
+    } else {
+      setMkvWarning(false);
+    }
+
+    const objUrl = URL.createObjectURL(file);
+    setLocalVideoUrl(objUrl);
+    setIsLiveStreamActive(true);
+
+    socket.emit('media:change_source', { 
+      type: 'LIVE_STREAM', 
+      title: `${t.localFileTag}: ${file.name}` 
+    });
+
+    e.target.value = '';
   };
 
   const handleSendMessage = ({ text, type, color }) => {
@@ -458,246 +580,267 @@ export default function App() {
   if (!roomData) {
     return (
       <div className={`w-screen min-h-screen ${currentTheme.bg} ${currentTheme.textColor} flex items-center justify-center p-3 md:p-6 transition-colors duration-300 relative overflow-y-auto`}>
-        {/* Giriş Ekranı Sağ Üst Butonları */}
-        <div className="absolute top-4 right-4 flex items-center gap-2">
-          <button
-            onClick={() => setIsAboutOpen(true)}
-            className={`p-2.5 rounded-2xl cursor-pointer ${currentTheme.buttonSecondary} shadow-lg flex items-center gap-1.5 text-xs font-bold`}
-            title={t.about}
-          >
-            <Info size={16} />
-            <span className="hidden sm:inline">{t.about}</span>
-          </button>
+        
+        {/* Kart ve Butonları Bir Arada Tutan Kapsayıcı */}
+        <div className="w-full max-w-lg flex flex-col my-auto py-3">
+          
+          {/* Giriş Ekranı Üst Butonları (Sol: v1.1 Rozeti | Sağ: Bilgi & Ayarlar) */}
+          <div className="flex items-center justify-between mb-2 z-20 shrink-0 px-1">
+            <button
+              type="button"
+              onClick={() => setIsChangelogOpen(true)}
+              className="px-2.5 py-1.5 rounded-xl border-2 border-black bg-amber-400 text-black shadow-[2px_2px_0px_#000] flex items-center gap-1.5 text-xs font-black cursor-pointer hover:bg-amber-300 transition-transform active:scale-95 animate-pulse"
+              title="Peerora 1.1 Gamer Update"
+            >
+              <Sparkles size={14} fill="currentColor" />
+              <span>{t.gamerUpdateBadge}</span>
+            </button>
 
-          <button
-            onClick={() => setIsSettingsOpen(true)}
-            className={`p-2.5 rounded-2xl cursor-pointer ${currentTheme.buttonSecondary} shadow-lg flex items-center gap-2 text-xs font-bold`}
-            title={t.themeAndSettings}
-          >
-            <Settings size={16} />
-            <span className="hidden sm:inline">{t.themeAndSettings}</span>
-          </button>
-        </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setIsAboutOpen(true)}
+                className={`p-2 sm:p-2.5 rounded-2xl cursor-pointer ${currentTheme.buttonSecondary} shadow-md flex items-center gap-1.5 text-xs font-bold transition-transform active:scale-95`}
+                title={t.about}
+              >
+                <Info size={15} />
+                <span className="hidden sm:inline">{t.about}</span>
+              </button>
 
-        <div className={`w-full max-w-lg ${currentTheme.panel} p-5 md:p-7 space-y-4 my-auto shadow-2xl`}>
-          {/* Logo & Durum */}
-          <div className="text-center space-y-1">
-            <h1 className="text-2xl md:text-3xl font-black tracking-wider flex items-center justify-center gap-2">
-              <Radio size={28} /> {t.appTitle}
-            </h1>
-            <p className="text-xs opacity-70">{t.appSubtitle}</p>
-            <div className="flex items-center justify-center gap-1.5 pt-1">
-              <span className={`w-2.5 h-2.5 rounded-full ${isConnected ? 'bg-emerald-500' : 'bg-rose-500'}`} />
-              <span className="text-[10px] opacity-80">{isConnected ? t.serverConnected : t.serverDisconnected}</span>
+              <button
+                type="button"
+                onClick={() => setIsSettingsOpen(true)}
+                className={`p-2 sm:p-2.5 rounded-2xl cursor-pointer ${currentTheme.buttonSecondary} shadow-md flex items-center gap-1.5 text-xs font-bold transition-transform active:scale-95`}
+                title={t.themeAndSettings}
+              >
+                <Settings size={15} />
+                <span className="hidden sm:inline">{t.themeAndSettings}</span>
+              </button>
             </div>
           </div>
 
-          {/* Avatar & Takma Ad Girişi */}
-          <div className="flex gap-2 items-center">
-            <button
-              type="button"
-              onClick={getRandomAvatar}
-              className="text-2xl p-2 rounded-2xl bg-black/10 border border-black/15 hover:scale-105 active:scale-95 transition-transform cursor-pointer relative"
-              title="Avatar"
-            >
-              {avatar}
-              <Dices size={12} className="absolute -bottom-1 -right-1 bg-blue-600 text-white p-0.5 rounded-full" />
-            </button>
-            <input
-              type="text"
-              placeholder={t.nicknamePlaceholder}
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              className={`flex-1 ${currentTheme.input} px-3.5 py-2.5 text-sm outline-none`}
-            />
-          </div>
-
-          {/* Lobi Gezinme Sekmeleri */}
-          <div className="flex p-1 bg-black/10 rounded-2xl gap-1 text-xs font-bold">
-            <button
-              onClick={() => setLobbyTab('create')}
-              className={`flex-1 py-2 rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                lobbyTab === 'create' ? 'bg-blue-600 text-white shadow-md' : 'hover:bg-black/5 opacity-70'
-              }`}
-            >
-              <Sparkles size={14} /> {t.createTab}
-            </button>
-            <button
-              onClick={() => {
-                setLobbyTab('explore');
-                socket.emit('rooms:get_public', (list) => setPublicRooms(list));
-              }}
-              className={`flex-1 py-2 rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                lobbyTab === 'explore' ? 'bg-blue-600 text-white shadow-md' : 'hover:bg-black/5 opacity-70'
-              }`}
-            >
-              <Compass size={14} /> {t.exploreTab} ({publicRooms.length})
-            </button>
-          </div>
-
-          {/* SEKME 1: ODA OLUŞTUR & KODLA KATIL */}
-          {lobbyTab === 'create' ? (
-            <div className="space-y-3.5">
-              {/* Hazır Parti Şablonları */}
-              <div>
-                <span className="text-[11px] font-bold opacity-75 mb-1.5 block">{t.presetsTitle}</span>
-                <div className="grid grid-cols-3 gap-1.5">
-                  {PARTY_PRESETS.map((p) => (
-                    <button
-                      key={p.id}
-                      type="button"
-                      onClick={() => handleApplyPreset(p)}
-                      className="p-2 rounded-xl border border-black/10 bg-black/5 hover:bg-black/10 text-left transition-all cursor-pointer flex flex-col justify-between"
-                    >
-                      <span className="text-xs font-bold truncate">{t[p.nameKey]}</span>
-                      <span className="text-[9px] opacity-65 truncate">{p.maxUsers} {t.peopleCount}</span>
-                    </button>
-                  ))}
-                </div>
+          {/* Ana Kart */}
+          <div className={`w-full ${currentTheme.panel} p-5 md:p-7 space-y-4 shadow-2xl relative z-10`}>       
+            <div className="text-center space-y-1">
+              <h1 className="text-2xl md:text-3xl font-black tracking-wider flex items-center justify-center gap-2">
+                <Radio size={28} /> {t.appTitle}
+              </h1>
+              <p className="text-xs opacity-70">{t.appSubtitle}</p>
+              <div className="flex items-center justify-center gap-1.5 pt-1">
+                <span className={`w-2.5 h-2.5 rounded-full ${
+                  connectionStatus === 'connected' 
+                    ? 'bg-emerald-500 shadow-[0_0_8px_#10b981]' 
+                    : connectionStatus === 'connecting' 
+                    ? 'bg-amber-500 animate-pulse shadow-[0_0_8px_#f59e0b]' 
+                    : 'bg-rose-500 shadow-[0_0_8px_#f43f5e]'
+                }`} />
+                <span className="text-[10px] opacity-80">
+                  {connectionStatus === 'connected' 
+                    ? t.serverConnected 
+                    : connectionStatus === 'connecting' 
+                    ? t.connectingServer 
+                    : t.serverDisconnected}
+                </span>
               </div>
+            </div>
 
-              {/* Oda Başlığı & Gizlilik */}
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  placeholder={t.roomTitlePlaceholder}
-                  value={roomTitleInput}
-                  onChange={(e) => setRoomTitleInput(e.target.value)}
-                  className={`flex-1 ${currentTheme.input} px-3 py-2 text-xs outline-none`}
-                />
-                <button
-                  type="button"
-                  onClick={() => setIsPublicRoom((p) => !p)}
-                  className={`px-3 py-2 rounded-xl text-xs font-bold border border-black/10 flex items-center gap-1 cursor-pointer transition-colors ${
-                    isPublicRoom ? 'bg-emerald-500/20 text-emerald-600 border-emerald-500/40' : 'bg-black/10 opacity-70'
-                  }`}
-                >
-                  {isPublicRoom ? <Globe size={13} /> : <Lock size={13} />}
-                  <span>{isPublicRoom ? t.public : t.private}</span>
-                </button>
-              </div>
-
-              {/* Başlangıç Videosu Linki */}
-              <div className="space-y-1">
-                <label className="text-[11px] font-bold opacity-80 flex items-center gap-1">
-                  <Play size={12} /> {t.startVideoLabel}
-                </label>
-                <input
-                  type="text"
-                  placeholder={t.videoPlaceholder}
-                  value={initialMediaUrl}
-                  onChange={(e) => setInitialMediaUrl(e.target.value)}
-                  className={`w-full ${currentTheme.input} px-3 py-2 text-xs outline-none`}
-                />
-              </div>
-
-              {/* Kişi Limiti */}
-              <div className="flex items-center justify-between px-1 text-xs font-bold opacity-85">
-                <span className="flex items-center gap-1.5"><Users size={14} /> {t.userLimit}</span>
-                <div className="flex items-center gap-1">
-                  {[2, 4, 6, 8, 10].map((num) => (
-                    <button
-                      key={num}
-                      type="button"
-                      onClick={() => setMaxUsersInput(num)}
-                      className={`w-7 h-7 rounded-lg font-bold text-xs cursor-pointer transition-all ${
-                        maxUsersInput === num ? 'bg-blue-600 text-white shadow-md scale-110' : 'bg-black/10 hover:bg-black/20'
-                      }`}
-                    >
-                      {num}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
+            <div className="flex gap-2 items-center">
               <button
-                onClick={handleCreateRoom}
-                className={`w-full ${currentTheme.buttonPrimary} py-2.5 text-sm font-black cursor-pointer shadow-lg`}
+                type="button"
+                onClick={getRandomAvatar}
+                className="text-2xl p-2 rounded-2xl bg-black/10 border border-black/15 hover:scale-105 active:scale-95 transition-transform cursor-pointer relative"
+                title="Avatar"
               >
-                {t.createRoomBtn} ({maxUsersInput} {t.peopleCount})
+                {avatar}
+                <Dices size={12} className="absolute -bottom-1 -right-1 bg-blue-600 text-white p-0.5 rounded-full" />
               </button>
+              <input
+                type="text"
+                placeholder={t.nicknamePlaceholder}
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                className={`flex-1 ${currentTheme.input} px-3.5 py-2.5 text-sm outline-none`}
+              />
+            </div>
 
-              <div className="flex items-center gap-2 text-xs opacity-50 my-1">
-                <div className="flex-1 h-px bg-current" />
-                <span>{t.orJoinWithCode}</span>
-                <div className="flex-1 h-px bg-current" />
-              </div>
+            <div className="flex p-1 bg-black/10 rounded-2xl gap-1 text-xs font-bold">
+              <button
+                onClick={() => setLobbyTab('create')}
+                className={`flex-1 py-2 rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                  lobbyTab === 'create' ? 'bg-blue-600 text-white shadow-md' : 'hover:bg-black/5 opacity-70'
+                }`}
+              >
+                <Sparkles size={14} /> {t.createTab}
+              </button>
+              <button
+                onClick={() => {
+                  setLobbyTab('explore');
+                  socket.emit('rooms:get_public', (list) => setPublicRooms(list));
+                }}
+                className={`flex-1 py-2 rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                  lobbyTab === 'explore' ? 'bg-blue-600 text-white shadow-md' : 'hover:bg-black/5 opacity-70'
+                }`}
+              >
+                <Compass size={14} /> {t.exploreTab} ({publicRooms.length})
+              </button>
+            </div>
 
-              {/* Kod ile Katılma */}
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  placeholder={t.roomCodePlaceholder}
-                  value={roomIdInput}
-                  onChange={(e) => setRoomIdInput(e.target.value)}
-                  className={`flex-1 ${currentTheme.input} px-3 py-2 text-sm outline-none`}
-                />
-                <button
-                  onClick={() => handleJoinRoom()}
-                  className={`${currentTheme.buttonSecondary} px-4 py-2 text-sm font-black cursor-pointer`}
-                >
-                  {t.joinBtn}
-                </button>
-              </div>
-
-              {/* Son Katılınan Odalar */}
-              {recentRooms.length > 0 && (
-                <div className="pt-2 border-t border-black/10 space-y-1">
-                  <span className="text-[11px] font-bold opacity-75 flex items-center gap-1">
-                    <History size={12} /> {t.recentRooms}
-                  </span>
-                  <div className="flex flex-wrap gap-1.5">
-                    {recentRooms.map((code) => (
+            {lobbyTab === 'create' ? (
+              <div className="space-y-3.5">
+                <div>
+                  <span className="text-[11px] font-bold opacity-75 mb-1.5 block">{t.presetsTitle}</span>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {PARTY_PRESETS.map((p) => (
                       <button
-                        key={code}
-                        onClick={() => handleJoinRoom(code)}
-                        className="px-2.5 py-1 text-xs font-mono font-bold rounded-lg bg-black/10 hover:bg-black/20 transition-colors cursor-pointer"
+                        key={p.id}
+                        type="button"
+                        onClick={() => handleApplyPreset(p)}
+                        className="p-2 rounded-xl border border-black/10 bg-black/5 hover:bg-black/10 text-left transition-all cursor-pointer flex flex-col justify-between"
                       >
-                        #{code}
+                        <span className="text-xs font-bold truncate">{t[p.nameKey]}</span>
+                        <span className="text-[9px] opacity-65 truncate">{p.maxUsers} {t.peopleCount}</span>
                       </button>
                     ))}
                   </div>
                 </div>
-              )}
-            </div>
-          ) : (
-            /* SEKME 2: AÇIK ODALARI KEŞFET */
-            <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
-              {publicRooms.length === 0 ? (
-                <div className="text-center text-xs opacity-60 py-10 flex flex-col items-center gap-2">
-                  <Film size={24} />
-                  <span>{t.noPublicRooms}</span>
-                </div>
-              ) : (
-                publicRooms.map((r) => (
-                  <div
-                    key={r.roomId}
-                    className="p-3 rounded-2xl border border-black/10 bg-black/5 flex items-center justify-between gap-2 hover:bg-black/10 transition-all"
-                  >
-                    <div className="flex items-center gap-2.5 overflow-hidden">
-                      <span className="text-2xl p-1 bg-black/10 rounded-xl shrink-0">{r.hostAvatar}</span>
-                      <div className="flex flex-col truncate">
-                        <span className="text-xs font-bold truncate">{r.title}</span>
-                        <span className="text-[10px] opacity-70 truncate">{t.host}: {r.hostName} • {r.mediaType !== 'NONE' ? r.mediaType : t.waiting}</span>
-                      </div>
-                    </div>
 
-                    <div className="flex items-center gap-2 shrink-0">
-                      <span className="text-[11px] font-bold opacity-80 px-2 py-0.5 rounded-lg bg-black/10">
-                        {r.userCount}/{r.maxUsers}
-                      </span>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder={t.roomTitlePlaceholder}
+                    value={roomTitleInput}
+                    onChange={(e) => setRoomTitleInput(e.target.value)}
+                    className={`flex-1 ${currentTheme.input} px-3 py-2 text-xs outline-none`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setIsPublicRoom((p) => !p)}
+                    className={`px-3 py-2 rounded-xl text-xs font-bold border border-black/10 flex items-center gap-1 cursor-pointer transition-colors ${
+                      isPublicRoom ? 'bg-emerald-500/20 text-emerald-600 border-emerald-500/40' : 'bg-black/10 opacity-70'
+                    }`}
+                  >
+                    {isPublicRoom ? <Globe size={13} /> : <Lock size={13} />}
+                    <span>{isPublicRoom ? t.public : t.private}</span>
+                  </button>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold opacity-80 flex items-center gap-1">
+                    <Play size={12} /> {t.startVideoLabel}
+                  </label>
+                  <input
+                    type="text"
+                    placeholder={t.videoPlaceholder}
+                    value={initialMediaUrl}
+                    onChange={(e) => setInitialMediaUrl(e.target.value)}
+                    className={`w-full ${currentTheme.input} px-3 py-2 text-xs outline-none`}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between px-1 text-xs font-bold opacity-85">
+                  <span className="flex items-center gap-1.5"><Users size={14} /> {t.userLimit}</span>
+                  <div className="flex items-center gap-1">
+                    {[2, 4, 6, 8, 10].map((num) => (
                       <button
-                        onClick={() => handleJoinRoom(r.roomId)}
-                        className={`${currentTheme.buttonPrimary} px-3 py-1.5 text-xs font-black rounded-xl cursor-pointer`}
+                        key={num}
+                        type="button"
+                        onClick={() => setMaxUsersInput(num)}
+                        className={`w-7 h-7 rounded-lg font-bold text-xs cursor-pointer transition-all ${
+                          maxUsersInput === num ? 'bg-blue-600 text-white shadow-md scale-110' : 'bg-black/10 hover:bg-black/20'
+                        }`}
                       >
-                        {t.joinBtn}
+                        {num}
                       </button>
+                    ))}
+                  </div>
+                </div>
+
+                <button
+                  onClick={handleCreateRoom}
+                  className={`w-full ${currentTheme.buttonPrimary} py-2.5 text-sm font-black cursor-pointer shadow-lg`}
+                >
+                  {t.createRoomBtn} ({maxUsersInput} {t.peopleCount})
+                </button>
+
+                <div className="flex items-center gap-2 text-xs opacity-50 my-1">
+                  <div className="flex-1 h-px bg-current" />
+                  <span>{t.orJoinWithCode}</span>
+                  <div className="flex-1 h-px bg-current" />
+                </div>
+
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder={t.roomCodePlaceholder}
+                    value={roomIdInput}
+                    onChange={(e) => setRoomIdInput(e.target.value)}
+                    className={`flex-1 ${currentTheme.input} px-3 py-2 text-sm outline-none`}
+                  />
+                  <button
+                    onClick={() => handleJoinRoom()}
+                    className={`${currentTheme.buttonSecondary} px-4 py-2 text-sm font-black cursor-pointer`}
+                  >
+                    {t.joinBtn}
+                  </button>
+                </div>
+
+                {recentRooms.length > 0 && (
+                  <div className="pt-2 border-t border-black/10 space-y-1">
+                    <span className="text-[11px] font-bold opacity-75 flex items-center gap-1">
+                      <History size={12} /> {t.recentRooms}
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {recentRooms.map((code) => (
+                        <button
+                          key={code}
+                          onClick={() => handleJoinRoom(code)}
+                          className="px-2.5 py-1 text-xs font-mono font-bold rounded-lg bg-black/10 hover:bg-black/20 transition-colors cursor-pointer"
+                        >
+                          #{code}
+                        </button>
+                      ))}
                     </div>
                   </div>
-                ))
-              )}
-            </div>
-          )}
+                )}
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                {publicRooms.length === 0 ? (
+                  <div className="text-center text-xs opacity-60 py-10 flex flex-col items-center gap-2">
+                    <Film size={24} />
+                    <span>{t.noPublicRooms}</span>
+                  </div>
+                ) : (
+                  publicRooms.map((r) => (
+                    <div
+                      key={r.roomId}
+                      className="p-3 rounded-2xl border border-black/10 bg-black/5 flex items-center justify-between gap-2 hover:bg-black/10 transition-all"
+                    >
+                      <div className="flex items-center gap-2.5 overflow-hidden">
+                        <span className="text-2xl p-1 bg-black/10 rounded-xl shrink-0">{r.hostAvatar}</span>
+                        <div className="flex flex-col truncate">
+                          <span className="text-xs font-bold truncate">{r.title}</span>
+                          <span className="text-[10px] opacity-70 truncate">{t.host}: {r.hostName} • {r.mediaType !== 'NONE' ? r.mediaType : t.waiting}</span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-[11px] font-bold opacity-80 px-2 py-0.5 rounded-lg bg-black/10">
+                          {r.userCount}/{r.maxUsers}
+                        </span>
+                        <button
+                          onClick={() => handleJoinRoom(r.roomId)}
+                          className={`${currentTheme.buttonPrimary} px-3 py-1.5 text-xs font-black rounded-xl cursor-pointer`}
+                        >
+                          {t.joinBtn}
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Lobi Modalları */}
@@ -718,6 +861,13 @@ export default function App() {
           theme={currentTheme}
           lang={lang}
         />
+
+        <ChangelogModal
+          isOpen={isChangelogOpen}
+          onClose={() => setIsChangelogOpen(false)}
+          theme={currentTheme}
+          lang={lang}
+        />
       </div>
     );
   }
@@ -726,7 +876,6 @@ export default function App() {
   return (
     <div className={`w-screen min-h-screen ${currentTheme.bg} ${currentTheme.textColor} flex flex-col justify-between overflow-hidden relative transition-colors duration-300`}>
       <div className="w-full max-w-7xl mx-auto h-screen flex flex-col p-2.5 md:p-5 justify-between gap-3">
-        {/* Floating Emojiler */}
         <div className="absolute inset-0 pointer-events-none z-50 overflow-hidden">
           {reactions.map((r) => (
             <span
@@ -748,7 +897,7 @@ export default function App() {
               className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-mono cursor-pointer shrink-0 ${currentTheme.badge}`}
               title={t.copyCode}
             >
-            <span className="truncate max-w-20 sm:max-w-none">#{roomData.roomId}</span>
+              <span className="truncate max-w-20 sm:max-w-none">#{roomData.roomId}</span>
               {copied ? <Check size={13} className="text-emerald-300 shrink-0" /> : <Copy size={13} className="shrink-0" />}
             </button>
 
@@ -789,6 +938,17 @@ export default function App() {
                 </button>
               )}
             </div>
+
+            {/* Mini Oyunlar */}
+            <button
+              onClick={() => setIsGameModalOpen(true)}
+              className={`p-2 rounded-xl cursor-pointer flex items-center gap-1 text-xs font-bold shrink-0 ${
+                activeGame ? 'bg-amber-500 text-black shadow-md animate-pulse' : currentTheme.buttonSecondary
+              }`}
+              title={t.gamesTitle}
+            >
+              <Gamepad2 size={15} />
+            </button>
 
             {/* Anket */}
             <button
@@ -846,58 +1006,115 @@ export default function App() {
         <div className="flex-1 flex flex-col md:grid md:grid-cols-12 gap-3 min-h-0 overflow-hidden">
           <div className="flex flex-col gap-2.5 md:col-span-8 lg:col-span-9 min-h-0 justify-between">
             <div className="flex-1 min-h-0 flex items-center justify-center">
-              <VideoPlayer
-                sourceUrl={currentMedia.url}
-                isHost={roomData.isHost}
-                playbackState={playbackState}
-                onStateChange={(state) => socket.emit('media:sync_state', state)}
-                peerStream={activeStream}
-                isLiveStreamActive={isLiveStreamActive}
-                danmakuList={danmakuList}
-                danmakuEnabled={danmakuEnabled}
-                onVideoEnded={() => socket.emit('playlist:play_next')}
-                laserPoints={laserPointsRef}
-                onLaserEmit={(point) => socket.emit('laser:point', point)}
-                userColor={userColor}
-                theme={currentTheme}
-                lang={lang}
-              />
+              {activeGame ? (
+                <GameStage
+                  key={activeGame.type + (activeGame.endTime || activeGame.word || '')}
+                  game={activeGame}
+                  socket={socket}
+                  isHost={roomData.isHost}
+                  userColor={userColor}
+                  onEndGame={handleEndGame}
+                  lang={lang}
+                />
+              ) : (
+                <VideoPlayer
+                  sourceUrl={currentMedia.url}
+                  isHost={roomData.isHost}
+                  playbackState={playbackState}
+                  onStateChange={(state) => socket.emit('media:sync_state', state)}
+                  peerStream={activeStream}
+                  isLiveStreamActive={isLiveStreamActive}
+                  localVideoUrl={localVideoUrl}
+                  onLocalStreamReady={async (stream) => {
+                    await startLocalFileShare(stream);
+                    roomUsers.forEach((u) => {
+                      if (u.id !== socket.id) sendScreenOffer(u.id);
+                    });
+                  }}
+                  danmakuList={danmakuList}
+                  danmakuEnabled={danmakuEnabled}
+                  onVideoEnded={() => socket.emit('playlist:play_next')}
+                  laserPoints={laserPointsRef}
+                  onLaserEmit={(point) => socket.emit('laser:point', point)}
+                  userColor={userColor}
+                  theme={currentTheme}
+                  lang={lang}
+                />
+              )}
             </div>
 
             {/* Host Kontrolleri */}
             {roomData.isHost && (
-              <div className={`flex flex-col md:flex-row gap-2 shrink-0 ${currentTheme.panel} p-2 md:p-3`}>
-                <button
-                  onClick={handleToggleStream}
-                  className={`w-full md:w-auto px-4 py-2 rounded-xl text-xs font-black flex items-center justify-center gap-2 cursor-pointer shadow-lg shrink-0 ${
-                    isLiveStreamActive ? 'bg-rose-600 hover:bg-rose-500 text-white' : currentTheme.buttonPrimary
-                  }`}
-                >
-                  {isLiveStreamActive ? (
-                    <>
-                      <Square size={14} fill="currentColor" /> {t.stopStream}
-                    </>
-                  ) : (
-                    <>
-                      <MonitorPlay size={14} /> {t.startStream}
-                    </>
-                  )}
-                </button>
+              <div className="relative flex flex-col gap-2 shrink-0">
+                {mkvWarning && (
+                  <div className="p-2.5 bg-amber-400 text-black border-2 border-black rounded-xl shadow-[3px_3px_0px_#000] text-xs font-bold flex items-center justify-between gap-2 animate-fade-in">
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle size={16} className="shrink-0 text-amber-950" />
+                      <span>{t.mkvAudioNotice}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setMkvWarning(false)}
+                      className="p-1 hover:bg-black/10 rounded-lg cursor-pointer shrink-0"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                )}
 
-                <div className="flex flex-1 gap-2">
+                <div className={`flex flex-col md:flex-row items-center gap-2 ${currentTheme.panel} p-2 md:p-2.5`}>
                   <input
-                    type="text"
-                    placeholder={t.videoPlaceholder}
-                    value={videoUrlInput}
-                    onChange={(e) => setVideoUrlInput(e.target.value)}
-                    className={`flex-1 ${currentTheme.input} text-xs px-3 py-2 outline-none`}
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleLocalFileSelect}
+                    accept="video/mp4,video/x-matroska,video/mkv,video/webm,video/*"
+                    className="hidden"
                   />
+
                   <button
-                    onClick={handleLoadUrl}
-                    className={`${currentTheme.buttonPrimary} px-4 py-2 text-xs font-black flex items-center gap-1.5 cursor-pointer shrink-0`}
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className={`w-full md:w-auto px-3 py-2 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 cursor-pointer shadow-md shrink-0 ${currentTheme.buttonSecondary}`}
+                    title={t.selectLocalVideo}
                   >
-                    <Link2 size={14} /> {t.loadBtn}
+                    <FileVideo size={15} />
+                    <span className="hidden sm:inline">{t.selectLocalVideo}</span>
                   </button>
+
+                  {canShareScreen && (
+                    <button
+                      onClick={handleToggleStream}
+                      className={`w-full md:w-auto px-4 py-2 rounded-xl text-xs font-black flex items-center justify-center gap-2 cursor-pointer shadow-lg shrink-0 ${
+                        isLiveStreamActive ? 'bg-rose-600 hover:bg-rose-500 text-white' : currentTheme.buttonPrimary
+                      }`}
+                    >
+                      {isLiveStreamActive ? (
+                        <>
+                          <Square size={14} fill="currentColor" /> {t.stopStream}
+                        </>
+                      ) : (
+                        <>
+                          <MonitorPlay size={14} /> {t.startStream}
+                        </>
+                      )}
+                    </button>
+                  )}
+
+                  <div className="flex flex-1 w-full gap-2">
+                    <input
+                      type="text"
+                      placeholder={t.videoPlaceholder}
+                      value={videoUrlInput}
+                      onChange={(e) => setVideoUrlInput(e.target.value)}
+                      className={`flex-1 ${currentTheme.input} text-xs px-3 py-2 outline-none`}
+                    />
+                    <button
+                      onClick={handleLoadUrl}
+                      className={`${currentTheme.buttonPrimary} px-4 py-2 text-xs font-black flex items-center gap-1.5 cursor-pointer shrink-0`}
+                    >
+                      <Link2 size={14} /> {t.loadBtn}
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
@@ -914,6 +1131,7 @@ export default function App() {
               danmakuEnabled={danmakuEnabled}
               onToggleDanmaku={() => setDanmakuEnabled((p) => !p)}
               currentUsername={`${avatar} ${username}`}
+              currentUserId={socket.id}
               userColor={userColor}
               theme={currentTheme}
               isMuted={isMuted}
@@ -925,29 +1143,29 @@ export default function App() {
 
       {/* Oda Modalları */}
       <PlaylistModal
-  isOpen={isPlaylistOpen}
-  onClose={() => setIsPlaylistOpen(false)}
-  playlist={playlist}
-  onAddToPlaylist={(item) => { setPlaylist((prev) => [...prev, item]); socket.emit('playlist:add', item); }}
-  onRemoveFromPlaylist={(itemId) => { setPlaylist((prev) => prev.filter((i) => i.id !== itemId)); socket.emit('playlist:remove', { itemId }); }}
-  onPlayNext={() => socket.emit('playlist:play_next')}
-  isHost={roomData.isHost}
-  theme={currentTheme}
-  lang={lang}
-/>
+        isOpen={isPlaylistOpen}
+        onClose={() => setIsPlaylistOpen(false)}
+        playlist={playlist}
+        onAddToPlaylist={(item) => { setPlaylist((prev) => [...prev, item]); socket.emit('playlist:add', item); }}
+        onRemoveFromPlaylist={(itemId) => { setPlaylist((prev) => prev.filter((i) => i.id !== itemId)); socket.emit('playlist:remove', { itemId }); }}
+        onPlayNext={() => socket.emit('playlist:play_next')}
+        isHost={roomData.isHost}
+        theme={currentTheme}
+        lang={lang}
+      />
 
- <PollModal
-  isOpen={isPollOpen}
-  onClose={() => setIsPollOpen(false)}
-  poll={poll}
-  onCreatePoll={(pollData) => socket.emit('poll:create', pollData)}
-  onVote={(optionId) => socket.emit('poll:vote', { optionId })}
-  onEndPoll={() => socket.emit('poll:end')}
-  isHost={roomData.isHost}
-  userId={socket.id}
-  theme={currentTheme}
-  lang={lang}
-/>
+      <PollModal
+        isOpen={isPollOpen}
+        onClose={() => setIsPollOpen(false)}
+        poll={poll}
+        onCreatePoll={(pollData) => socket.emit('poll:create', pollData)}
+        onVote={(optionId) => socket.emit('poll:vote', { optionId })}
+        onEndPoll={() => socket.emit('poll:end')}
+        isHost={roomData.isHost}
+        userId={socket.id}
+        theme={currentTheme}
+        lang={lang}
+      />
 
       <UserListModal
         isOpen={isUserListOpen}
@@ -977,6 +1195,23 @@ export default function App() {
       <AboutModal
         isOpen={isAboutOpen}
         onClose={() => setIsAboutOpen(false)}
+        theme={currentTheme}
+        lang={lang}
+      />
+
+      <ChangelogModal
+        isOpen={isChangelogOpen}
+        onClose={() => setIsChangelogOpen(false)}
+        theme={currentTheme}
+        lang={lang}
+      />
+
+      {/* Oyun Seçim Modalı */}
+      <GameModal
+        isOpen={isGameModalOpen}
+        onClose={() => setIsGameModalOpen(false)}
+        onStartGame={(gameType, customConfig) => socket.emit('game:start', { gameType, lang, customConfig })}
+        isHost={roomData.isHost}
         theme={currentTheme}
         lang={lang}
       />

@@ -182,3 +182,11 @@ export async function handleSignal({ sender, payload }, onRemoteScreen, onRemote
     if (pc && pc.remoteDescription) await pc.addIceCandidate(new RTCIceCandidate(payload.candidate)).catch(() => {});
   }
 }
+// Yerel video dosyasının (MP4/MKV) akışını WebRTC üzerinden yayına bağlar
+// Yerel video dosyasının (MP4/MKV) akışını WebRTC üzerinden yayına bağlar
+export async function startLocalFileShare(fileStream, onLocalStream) {
+  stopScreenShare();
+  localScreenStream = fileStream;
+  if (onLocalStream) onLocalStream(localScreenStream);
+  return localScreenStream;
+}

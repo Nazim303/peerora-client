@@ -10,13 +10,11 @@ export function parseVideoUrl(url) {
   if (!url) return { type: 'NONE', id: null, embedUrl: null };
   const cleanUrl = url.trim();
 
-  // 1. YouTube (watch, shorts, youtu.be, embed)
   const ytMatch = cleanUrl.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|shorts\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
   if (ytMatch && ytMatch[1]) {
     return { type: 'YOUTUBE', id: ytMatch[1] };
   }
 
-  // 2. Twitch VOD & Canlı
   const twitchVod = cleanUrl.match(/twitch\.tv\/videos\/(\d+)/);
   if (twitchVod) {
     const parentHost = window.location.hostname || 'localhost';
@@ -35,7 +33,6 @@ export function parseVideoUrl(url) {
     };
   }
 
-  // 3. Vimeo
   const vimeo = cleanUrl.match(/vimeo\.com\/(?:channels\/(?:\w+\/)?|groups\/([^\/]*)\/videos\/|album\/(\d+)\/video\/|video\/|)(\d+)/);
   if (vimeo && vimeo[3]) {
     return { 
@@ -72,6 +69,8 @@ export default function VideoPlayer({
   onStateChange, 
   peerStream, 
   isLiveStreamActive, 
+  localVideoUrl,
+  onLocalStreamReady,
   danmakuList, 
   danmakuEnabled, 
   onVideoEnded,
@@ -84,6 +83,7 @@ export default function VideoPlayer({
   const canvasRef = useRef(null);
   const videoRef = useRef(null);
   const streamVideoRef = useRef(null);
+  const localHostVideoRef = useRef(null);
   const ytIframeRef = useRef(null);
   const ytPlayerRef = useRef(null);
   const hlsRef = useRef(null);
@@ -91,11 +91,9 @@ export default function VideoPlayer({
 
   const t = translations[lang] || translations.tr;
 
-  // Lazer
   const [isLaserMode, setIsLaserMode] = useState(false);
   const isMouseDownRef = useRef(false);
 
-  // Yerel & Kişisel Ayarlar (Sadece kullanıcının kendi tarayıcısını etkiler)
   const [localVolume, setLocalVolume] = useState(100);
   const [isLocalMuted, setIsLocalMuted] = useState(false);
   const [isCcActive, setIsCcActive] = useState(false);
@@ -126,7 +124,30 @@ export default function VideoPlayer({
     }
   };
 
-  // 1. YouTube IFrame API Entegrasyonu
+  // Host'un yerel videosundan WebRTC akışını yakalayıp odaya dağıtma
+  useEffect(() => {
+    if (!localVideoUrl || !isHost || !localHostVideoRef.current) return;
+    const videoEl = localHostVideoRef.current;
+
+    const emitStream = () => {
+      try {
+        const stream = videoEl.captureStream ? videoEl.captureStream() : videoEl.mozCaptureStream();
+        if (stream && onLocalStreamReady) {
+          onLocalStreamReady(stream);
+        }
+      } catch (err) {
+        console.error('captureStream hatası:', err);
+      }
+    };
+
+    if (videoEl.readyState >= 1) {
+      emitStream();
+    } else {
+      videoEl.onloadedmetadata = emitStream;
+    }
+  }, [localVideoUrl, isHost]);
+
+  // YouTube IFrame API
   useEffect(() => {
     if (parsedMedia.type !== 'YOUTUBE' || isLiveStreamActive) return;
     const ytId = parsedMedia.id;
@@ -195,7 +216,7 @@ export default function VideoPlayer({
     };
   }, [parsedMedia.id, parsedMedia.type, isHost, isLiveStreamActive]);
 
-  // 2. MP4 / HLS Video Yönetimi
+  // MP4 / HLS Video
   useEffect(() => {
     if (isLiveStreamActive || parsedMedia.type !== 'DIRECT' || !sourceUrl || !videoRef.current) return;
     const video = videoRef.current;
@@ -230,7 +251,7 @@ export default function VideoPlayer({
     };
   }, [sourceUrl, isLiveStreamActive, parsedMedia.type]);
 
-  // 3. Misafir Senkronizasyonu & Drift Düzeltmesi
+  // Misafir Senkronizasyonu
   useEffect(() => {
     if (!playbackState || isLiveStreamActive || isHost) return;
     isSyncingRef.current = true;
@@ -282,16 +303,16 @@ export default function VideoPlayer({
     setTimeout(() => { isSyncingRef.current = false; }, 200);
   }, [playbackState, isHost, parsedMedia.type, isLiveStreamActive, currentSpeed]);
 
-  // 4. Host Hızlandırma Butonu
   const handleSpeedChange = (speed) => {
     if (!isHost) return;
     setCurrentSpeed(speed);
     sendYtCommand('setPlaybackRate', [speed]);
     if (videoRef.current) videoRef.current.playbackRate = speed;
+    if (localHostVideoRef.current) localHostVideoRef.current.playbackRate = speed;
 
     const currentTime = ytPlayerRef.current?.getCurrentTime 
       ? ytPlayerRef.current.getCurrentTime() 
-      : (videoRef.current?.currentTime || 0);
+      : (videoRef.current?.currentTime || localHostVideoRef.current?.currentTime || 0);
 
     onStateChange({
       state: playbackState?.state || 'PAUSED',
@@ -302,16 +323,25 @@ export default function VideoPlayer({
     setShowSpeedMenu(false);
   };
 
-  // 5. Bağımsız Yerel Ses Ayarı
+  // Ses ayarını hem normal oynatıcıya hem de canlı yayın/misafir oynatıcısına uygula
   const handleVolumeChange = (newVol) => {
     setLocalVolume(newVol);
     setIsLocalMuted(newVol === 0);
 
     sendYtCommand('unMute');
     sendYtCommand('setVolume', [newVol]);
+
     if (videoRef.current) {
       videoRef.current.volume = newVol / 100;
       videoRef.current.muted = (newVol === 0);
+    }
+    if (streamVideoRef.current) {
+      streamVideoRef.current.volume = newVol / 100;
+      streamVideoRef.current.muted = (newVol === 0);
+    }
+    if (localHostVideoRef.current) {
+      localHostVideoRef.current.volume = newVol / 100;
+      localHostVideoRef.current.muted = (newVol === 0);
     }
   };
 
@@ -322,17 +352,28 @@ export default function VideoPlayer({
     if (nextMute) {
       sendYtCommand('mute');
       if (videoRef.current) videoRef.current.muted = true;
+      if (streamVideoRef.current) streamVideoRef.current.muted = true;
+      if (localHostVideoRef.current) localHostVideoRef.current.muted = true;
     } else {
       sendYtCommand('unMute');
       sendYtCommand('setVolume', [localVolume || 50]);
+      const targetVol = (localVolume || 50) / 100;
+
       if (videoRef.current) {
         videoRef.current.muted = false;
-        videoRef.current.volume = (localVolume || 50) / 100;
+        videoRef.current.volume = targetVol;
+      }
+      if (streamVideoRef.current) {
+        streamVideoRef.current.muted = false;
+        streamVideoRef.current.volume = targetVol;
+      }
+      if (localHostVideoRef.current) {
+        localHostVideoRef.current.muted = false;
+        localHostVideoRef.current.volume = targetVol;
       }
     }
   };
 
-  // 6. Bağımsız Altyazı (CC)
   const handleToggleCc = () => {
     const nextCc = !isCcActive;
     setIsCcActive(nextCc);
@@ -352,7 +393,6 @@ export default function VideoPlayer({
     }
   };
 
-  // 7. Bağımsız Çözünürlük Seçimi
   const handleQualityChange = (quality) => {
     setSelectedQuality(quality);
     sendYtCommand('setPlaybackQuality', [quality]);
@@ -371,7 +411,6 @@ export default function VideoPlayer({
     setShowQualityMenu(false);
   };
 
-  // 8. Misafir "Host'a Eşitle" Butonu
   const handleJumpToHost = () => {
     let targetTime = playbackState?.currentTime || 0;
     if (playbackState?.state === 'PLAYING' && playbackState?.timestamp) {
@@ -393,7 +432,6 @@ export default function VideoPlayer({
     setTimeout(() => setSyncToast(false), 2000);
   };
 
-  // 9. Lazer Tuvali Çizimi
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -470,7 +508,6 @@ export default function VideoPlayer({
     return () => document.removeEventListener('fullscreenchange', handleFsChange);
   }, []);
 
-  // WebRTC Stream
   useEffect(() => {
     if (streamVideoRef.current && peerStream) {
       streamVideoRef.current.srcObject = peerStream;
@@ -478,7 +515,6 @@ export default function VideoPlayer({
     }
   }, [peerStream]);
 
-  // Host Kalp Atışı
   useEffect(() => {
     if (!isHost || isLiveStreamActive) return;
 
@@ -515,8 +551,20 @@ export default function VideoPlayer({
         isFullscreen ? 'rounded-none border-0' : ''
       }`}
     >
-      {/* 1. CANLI EKRAN YAYINI */}
-      {isLiveStreamActive ? (
+      {/* 1. YEREL DOSYA YAYINI (HOST İÇİN TÜM VİDEO KONTROLLERİ AKTİF) */}
+      {localVideoUrl && isHost ? (
+        <div className="absolute inset-0 w-full h-full bg-black flex items-center justify-center">
+          <video
+            ref={localHostVideoRef}
+            src={localVideoUrl}
+            controls
+            playsInline
+            autoPlay
+            className="w-full h-full object-contain pointer-events-auto"
+          />
+        </div>
+      ) : isLiveStreamActive ? (
+        /* 2. CANLI EKRAN VEYA MİSAFİR İÇİN YEREL VİDEO AKIŞI */
         <div className="absolute inset-0 w-full h-full flex items-center justify-center bg-black">
           <video ref={streamVideoRef} autoPlay playsInline muted={isHost} className="w-full h-full object-contain" />
           {needsUserUnmute && (
@@ -535,13 +583,13 @@ export default function VideoPlayer({
           )}
         </div>
      ) : parsedMedia.type === 'YOUTUBE' ? (
-        /* 2. YOUTUBE OYNATICI */
+        /* 3. YOUTUBE OYNATICI */
         <div className="absolute inset-0 w-full h-full bg-black flex items-center justify-center">
           <div id="yt-player-target" className="w-full h-full pointer-events-auto" />
           {!isHost && <div className="absolute inset-0 z-20 bg-transparent pointer-events-auto cursor-default" />}
         </div>
       ) : parsedMedia.embedUrl ? (
-        /* 3. TWITCH / VIMEO */
+        /* 4. TWITCH / VIMEO */
         <div className="absolute inset-0 w-full h-full bg-black">
           <iframe
             key={parsedMedia.embedUrl}
@@ -554,7 +602,7 @@ export default function VideoPlayer({
           {!isHost && <div className="absolute inset-0 z-20 bg-transparent pointer-events-auto cursor-default" />}
         </div>
       ) : parsedMedia.type === 'DIRECT' && sourceUrl ? (
-        /* 4. DOĞRUDAN MP4 / HLS */
+        /* 5. DOĞRUDAN MP4 / HLS */
         <div className="absolute inset-0 w-full h-full bg-black flex items-center justify-center">
           <video
             ref={videoRef}
@@ -569,7 +617,7 @@ export default function VideoPlayer({
           {!isHost && <div className="absolute inset-0 z-20 bg-transparent pointer-events-auto cursor-default" />}
         </div>
       ) : (
-        /* 5. BOŞ DURUM */
+        /* 6. BOŞ DURUM */
         <div className="absolute inset-0 w-full h-full flex flex-col items-center justify-center gap-1.5 text-center p-4 text-gray-500 text-xs">
           <span className="font-semibold text-gray-400">{t.noMediaTitle}</span>
           <span className="text-[11px] text-gray-600">{t.noMediaDesc}</span>
@@ -614,10 +662,7 @@ export default function VideoPlayer({
 
       {/* ÜST KONTROL ÇUBUKLARI */}
       <div className="absolute top-3 inset-x-3 z-40 flex items-center justify-between pointer-events-none">
-        
-        {/* SOL GRUP (Lazer + Hız + Eşitle) */}
         <div className="flex items-center gap-2 pointer-events-auto">
-          {/* Lazer Modu Butonu */}
           <button
             onClick={() => setIsLaserMode((prev) => !prev)}
             className={`p-2 rounded-xl backdrop-blur-md border text-xs font-bold flex items-center gap-1 cursor-pointer transition-all shadow-lg ${
@@ -631,7 +676,6 @@ export default function VideoPlayer({
             <span className="hidden sm:inline">{isLaserMode ? t.laserOn : t.laser}</span>
           </button>
 
-          {/* Host Hız Menüsü */}
           {isHost && (sourceUrl || isLiveStreamActive) && (
             <div className="relative">
               <button
@@ -662,7 +706,6 @@ export default function VideoPlayer({
             </div>
           )}
 
-          {/* Misafir "Host'a Eşitle" Butonu */}
           {!isHost && (sourceUrl || isLiveStreamActive) && (
             <button
               onClick={handleJumpToHost}
@@ -675,10 +718,7 @@ export default function VideoPlayer({
           )}
         </div>
 
-        {/* SAĞ GRUP (Ses + Altyazı + Kalite + Tam Ekran) */}
         <div className="flex items-center gap-1.5 pointer-events-auto shrink-0">
-          
-          {/* Kişisel Ses & Mute Kontrolü */}
           <div className="flex items-center gap-1 bg-black/75 backdrop-blur-md border border-white/10 px-2 py-1.5 rounded-xl shadow-lg">
             <button
               onClick={handleToggleMute}
@@ -698,7 +738,6 @@ export default function VideoPlayer({
             />
           </div>
 
-          {/* Bağımsız Altyazı (CC) */}
           <button
             onClick={handleToggleCc}
             className={`p-2 rounded-xl backdrop-blur-md border text-xs font-bold flex items-center gap-1 cursor-pointer transition-all shadow-lg ${
@@ -711,7 +750,6 @@ export default function VideoPlayer({
             <Subtitles size={15} />
           </button>
 
-          {/* Bağımsız Kalite Menüsü */}
           <div className="relative">
             <button
               onClick={() => setShowQualityMenu((p) => !p)}
@@ -746,8 +784,7 @@ export default function VideoPlayer({
             )}
           </div>
 
-          {/* Tam Ekran */}
-          {(sourceUrl || isLiveStreamActive) && (
+          {(sourceUrl || isLiveStreamActive || localVideoUrl) && (
             <button
               onClick={toggleFullscreen}
               className="bg-black/75 hover:bg-black/90 text-white p-2 rounded-xl backdrop-blur-md border border-white/10 transition-all cursor-pointer shadow-lg active:scale-95"
