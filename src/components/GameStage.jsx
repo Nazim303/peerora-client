@@ -17,14 +17,19 @@ export default function GameStage({ game, socket, isHost, userColor, onEndGame, 
 
   const isMyTurnToDraw = game?.type === 'DOODLE' && game.drawerId === socket.id;
 
-  // Yeni Tur Başladığında State'leri Otomatik Sıfırla
+  // Yeni Tur Başladığında State'leri ve Sayacı Sıfırla
   useEffect(() => {
     if (game?.type === 'SPYFALL') {
-      setSpyPhase(game.phase || 'PLAYING');
-      if (game.phase === 'PLAYING') {
+      const currentPhase = game.phase || 'PLAYING';
+      setSpyPhase(currentPhase);
+      if (currentPhase === 'PLAYING') {
         setGameResult(null);
         setSelectedVoteId(null);
         setShowRole(true);
+        setVoteProgress({ votedCount: 0, totalCount: game?.users?.length || 0 });
+      }
+      if (game.endTime) {
+        setTimeLeft(Math.max(Math.round((game.endTime - Date.now()) / 1000), 0));
       }
       if (game.users) setPlayerList(game.users);
     }
@@ -106,15 +111,18 @@ export default function GameStage({ game, socket, isHost, userColor, onEndGame, 
 
   const lastPosRef = useRef({ x: 0, y: 0 });
 
+  // Kesin ve Kaymasız Koordinat Hesaplama
   const getCanvasCoords = (e) => {
     const canvas = canvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
     const rect = canvas.getBoundingClientRect();
     const clientX = e.touches && e.touches.length > 0 ? e.touches[0].clientX : e.clientX;
     const clientY = e.touches && e.touches.length > 0 ? e.touches[0].clientY : e.clientY;
+    
+    // Koordinatları 0..1 arasına sabitleyerek kenar taşmalarını engeller
     return {
-      x: (clientX - rect.left) / rect.width,
-      y: (clientY - rect.top) / rect.height
+      x: Math.max(0, Math.min(1, (clientX - rect.left) / rect.width)),
+      y: Math.max(0, Math.min(1, (clientY - rect.top) / rect.height))
     };
   };
 
@@ -248,19 +256,22 @@ export default function GameStage({ game, socket, isHost, userColor, onEndGame, 
             </div>
           )}
 
-          <canvas
-            ref={canvasRef}
-            width={800}
-            height={450}
-            onMouseDown={handleStartDraw}
-            onMouseMove={handleMoveDraw}
-            onMouseUp={handleStopDraw}
-            onMouseLeave={handleStopDraw}
-            onTouchStart={handleStartDraw}
-            onTouchMove={(e) => { if (e.cancelable) e.preventDefault(); handleMoveDraw(e); }}
-            onTouchEnd={handleStopDraw}
-            className={`w-full h-full object-contain ${isMyTurnToDraw ? 'cursor-crosshair touch-none' : 'cursor-default pointer-events-none'}`}
-          />
+          {/* Tam 16:9 Oranında Kilitli ve Kaymasız Tuval Kapsayıcısı */}
+          <div className="relative w-full aspect-video max-h-full flex items-center justify-center">
+            <canvas
+              ref={canvasRef}
+              width={800}
+              height={450}
+              onMouseDown={handleStartDraw}
+              onMouseMove={handleMoveDraw}
+              onMouseUp={handleStopDraw}
+              onMouseLeave={handleStopDraw}
+              onTouchStart={(e) => { if (e.cancelable) e.preventDefault(); handleStartDraw(e); }}
+              onTouchMove={(e) => { if (e.cancelable) e.preventDefault(); handleMoveDraw(e); }}
+              onTouchEnd={handleStopDraw}
+              className={`w-full h-full block ${isMyTurnToDraw ? 'cursor-crosshair touch-none' : 'cursor-default pointer-events-none'}`}
+            />
+          </div>
         </div>
       ) : spyPhase === 'PLAYING' ? (
         /* 2. SPYFALL: TARTIŞMA */

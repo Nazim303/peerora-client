@@ -29,7 +29,7 @@ import {
   Radio, MonitorPlay, Square, Link2, Tv, Copy, Check, LogOut, 
   ListMusic, Crown, Settings, Users, BarChart2, Mic, MicOff, Dices, 
   History, Play, Compass, Sparkles, Globe, Lock, Film, Info, FileVideo,
-  X, AlertTriangle, Gamepad2
+  X, AlertTriangle, Gamepad2, Share2 // <-- Eklendi
 } from 'lucide-react';
 import './App.css';
 
@@ -147,6 +147,7 @@ export default function App() {
   const [danmakuList, setDanmakuList] = useState([]);
   const [connectionStatus, setConnectionStatus] = useState(socket.connected ? 'connected' : 'connecting');
   const [copied, setCopied] = useState(false);
+  const [shareCopied, setShareCopied] = useState(false);
 
   const laserPointsRef = useRef([]);
   const roomDataRef = useRef(roomData);
@@ -205,6 +206,93 @@ export default function App() {
     setRoomData(null);
     if (alertMsg) alert(alertMsg);
   };
+
+  // 1.1.1: Odadayken Sayfayı Kazara Yenilemeyi / Kapatmayı Önleme
+  useEffect(() => {
+    if (!roomData) return;
+    const handleBeforeUnload = (e) => {
+      e.preventDefault();
+      e.returnValue = '';
+      return '';
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [roomData]);
+
+  // 1.1.1: Android Geri Tuşu ve Tarayıcı Geri Navigasyonu Yönetimi
+  useEffect(() => {
+    const closeAnyOpenModal = () => {
+      if (isPlaylistOpen) { setIsPlaylistOpen(false); return true; }
+      if (isSettingsOpen) { setIsSettingsOpen(false); return true; }
+      if (isPollOpen) { setIsPollOpen(false); return true; }
+      if (isUserListOpen) { setIsUserListOpen(false); return true; }
+      if (isAboutOpen) { setIsAboutOpen(false); return true; }
+      if (isChangelogOpen) { setIsChangelogOpen(false); return true; }
+      if (isGameModalOpen) { setIsGameModalOpen(false); return true; }
+      return false;
+    };
+
+    const handleBackAction = () => {
+      // 1. Bir modal açıksa önce onu kapat
+      if (closeAnyOpenModal()) return;
+
+      // 2. Modallar kapalıysa ve odadaysak onay sor
+      if (roomDataRef.current) {
+        if (window.confirm(roomDataRef.current.isHost ? t.closeRoomConfirm : t.leaveRoomConfirm)) {
+          socket.emit('room:leave');
+          resetRoomState();
+        }
+      }
+    };
+
+    // Capacitor Donanım Geri Tuşu (APK)
+    let capListener = null;
+    if (window.Capacitor?.Plugins?.App) {
+      window.Capacitor.Plugins.App.addListener('backButton', () => {
+        handleBackAction();
+      }).then((handle) => {
+        capListener = handle;
+      });
+    }
+
+    // Mobil Web ve Tarayıcı Geri Tuşu
+    const handlePopState = (e) => {
+      if (roomDataRef.current) {
+        e.preventDefault();
+        window.history.pushState({ inRoom: true }, '');
+        handleBackAction();
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+
+    return () => {
+      if (capListener) capListener.remove?.();
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [
+    isPlaylistOpen, isSettingsOpen, isPollOpen, isUserListOpen, 
+    isAboutOpen, isChangelogOpen, isGameModalOpen, lang
+  ]);
+
+  // 1.1.1: Host Tarafından Susturulduğunda Açık Olan Mikrofonu Kapatma
+  useEffect(() => {
+    if (isMuted && isMicEnabled) {
+      stopVoiceChat();
+      setIsMicEnabled(false);
+      setIsMicMuted(false);
+      alert(t.micMutedByHostNotice || 'Oda lideri mikrofonunuzu kapattı.');
+    }
+  }, [isMuted, isMicEnabled]);
+
+  // 1.1.1: Davet Linki Algılama (?room=123456)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const roomParam = params.get('room');
+    if (roomParam) {
+      setRoomIdInput(roomParam.trim());
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }, []);
 
   useEffect(() => {
     const onConnect = () => {
@@ -290,8 +378,9 @@ export default function App() {
       );
     });
 
+    // 1.1.1: Cihaz saat farkını sıfırlayan yerel varış zamanı damgası
     socket.on('laser:point', (point) => {
-      laserPointsRef.current.push(point);
+      laserPointsRef.current.push({ ...point, localTime: Date.now() });
     });
 
     socket.on('poll:updated', (updatedPoll) => {
@@ -384,6 +473,12 @@ export default function App() {
   }, [isMicEnabled]);
 
   const handleToggleVoice = async () => {
+    // 1.1.1: Susturulan kullanıcı mikrofon açamaz
+    if (isMuted) {
+      alert(t.micMutedByHostNotice || 'Oda lideri mikrofonunuzu kapattı.');
+      return;
+    }
+
     if (!isMicEnabled) {
       try {
         await startVoiceChat(
@@ -449,6 +544,7 @@ export default function App() {
     socket.emit('room:join', { roomId: code, username: username.trim(), avatar }, (res) => {
       if (res?.success) {
         setRoomData(res);
+        window.history.pushState({ inRoom: true }, '');
         saveRecentRoom(code);
         if (res.users) setRoomUsers(res.users);
         if (res.playlist) setPlaylist(res.playlist);
@@ -471,6 +567,31 @@ export default function App() {
     navigator.clipboard.writeText(roomData.roomId);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  // 1.1.1: Tek Tıkla Oda Davet Linki Paylaşma
+  const handleShareRoom = async () => {
+    if (!roomData?.roomId) return;
+    const originUrl = window.location.origin.includes('localhost') 
+      ? 'https://peerora.theosdev.web.tr' 
+      : window.location.origin;
+    const inviteUrl = `${originUrl}/?room=${roomData.roomId}`;
+    const shareText = `${username || 'Arkadaşın'} ${t.inviteShareText || 'seni Peerora\'da birlikte video izlemeye davet ediyor!'}`;
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: 'Peerora',
+          text: shareText,
+          url: inviteUrl
+        });
+        return;
+      } catch (e) {}
+    }
+
+    navigator.clipboard.writeText(inviteUrl);
+    setShareCopied(true);
+    setTimeout(() => setShareCopied(false), 2000);
   };
 
   const handleLeaveRoom = () => {
@@ -510,7 +631,7 @@ export default function App() {
     }
   };
 
-  const handleLoadUrl = () => {
+const handleLoadUrl = () => {
     if (!videoUrlInput.trim()) return;
 
     if (activeGame) {
@@ -524,10 +645,33 @@ export default function App() {
       setActiveStream(null);
       setIsLiveStreamActive(false);
     }
-    const mediaPayload = { type: 'DIRECT', url: videoUrlInput.trim() };
+
+    const cleanUrl = videoUrlInput.trim();
+    const isYt = cleanUrl.includes('youtube.com') || cleanUrl.includes('youtu.be');
+    const mediaPayload = { 
+      type: isYt ? 'YOUTUBE' : 'DIRECT', 
+      url: cleanUrl, 
+      timestamp: Date.now() 
+    };
+
     setCurrentMedia(mediaPayload);
     socket.emit('media:change_source', mediaPayload);
     setVideoUrlInput('');
+  };
+
+  // 1.1.1: Sıradaki videoya geç veya aktif medyayı tamamen kapat
+  const handleCloseOrNextMedia = () => {
+    if (playlist.length > 0) {
+      socket.emit('playlist:play_next');
+    } else {
+      stopScreenShare();
+      cleanupLocalVideo();
+      setActiveStream(null);
+      setIsLiveStreamActive(false);
+      setCurrentMedia({ type: 'NONE', url: '' });
+      setPlaybackState(null);
+      socket.emit('media:change_source', { type: 'NONE', url: '' });
+    }
   };
 
   const handleLocalFileSelect = (e) => {
@@ -584,13 +728,13 @@ export default function App() {
         {/* Kart ve Butonları Bir Arada Tutan Kapsayıcı */}
         <div className="w-full max-w-lg flex flex-col my-auto py-3">
           
-          {/* Giriş Ekranı Üst Butonları (Sol: v1.1 Rozeti | Sağ: Bilgi & Ayarlar) */}
+          {/* Giriş Ekranı Üst Butonları */}
           <div className="flex items-center justify-between mb-2 z-20 shrink-0 px-1">
             <button
               type="button"
               onClick={() => setIsChangelogOpen(true)}
               className="px-2.5 py-1.5 rounded-xl border-2 border-black bg-amber-400 text-black shadow-[2px_2px_0px_#000] flex items-center gap-1.5 text-xs font-black cursor-pointer hover:bg-amber-300 transition-transform active:scale-95 animate-pulse"
-              title="Peerora 1.1 Gamer Update"
+              title="Peerora 1.1.1 Hotfix"
             >
               <Sparkles size={14} fill="currentColor" />
               <span>{t.gamerUpdateBadge}</span>
@@ -897,7 +1041,26 @@ export default function App() {
               className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-mono cursor-pointer shrink-0 ${currentTheme.badge}`}
               title={t.copyCode}
             >
+              <span className="truncate max-w-20 sm:max-w-none">#{roomData.roomId}</span> {/* Oda Kodu */}
+            <button
+              onClick={handleCopyCode}
+              className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-mono cursor-pointer shrink-0 ${currentTheme.badge}`}
+              title={t.copyCode}
+            >
               <span className="truncate max-w-20 sm:max-w-none">#{roomData.roomId}</span>
+              {copied ? <Check size={13} className="text-emerald-300 shrink-0" /> : <Copy size={13} className="shrink-0" />}
+            </button>
+
+            {/* 1.1.1: Davet Et / Paylaş Butonu */}
+            <button
+              type="button"
+              onClick={handleShareRoom}
+              className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-bold cursor-pointer shrink-0 ${currentTheme.badge} hover:bg-black/15 transition-transform active:scale-95`}
+              title={t.shareRoom}
+            >
+              {shareCopied ? <Check size={13} className="text-emerald-300 shrink-0" /> : <Share2 size={13} className="shrink-0" />}
+              <span className="hidden sm:inline">{shareCopied ? t.shareLinkCopied : t.shareRoom}</span>
+            </button>
               {copied ? <Check size={13} className="text-emerald-300 shrink-0" /> : <Copy size={13} className="shrink-0" />}
             </button>
 
@@ -1017,8 +1180,9 @@ export default function App() {
                   lang={lang}
                 />
               ) : (
-                <VideoPlayer
+<VideoPlayer
                   sourceUrl={currentMedia.url}
+                  mediaTimestamp={currentMedia.timestamp}
                   isHost={roomData.isHost}
                   playbackState={playbackState}
                   onStateChange={(state) => socket.emit('media:sync_state', state)}
@@ -1110,10 +1274,25 @@ export default function App() {
                     />
                     <button
                       onClick={handleLoadUrl}
-                      className={`${currentTheme.buttonPrimary} px-4 py-2 text-xs font-black flex items-center gap-1.5 cursor-pointer shrink-0`}
+                      className={`${currentTheme.buttonPrimary} px-3 sm:px-4 py-2 text-xs font-black flex items-center gap-1.5 cursor-pointer shrink-0`}
                     >
                       <Link2 size={14} /> {t.loadBtn}
                     </button>
+
+                    {/* 1.1.1: Medyayı Kapat / Sıradakine Geç Butonu */}
+                    {(currentMedia.type !== 'NONE' || isLiveStreamActive || localVideoUrl) && (
+                      <button
+                        type="button"
+                        onClick={handleCloseOrNextMedia}
+                        className="px-3 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-black flex items-center gap-1 cursor-pointer shadow-md shrink-0 transition-transform active:scale-95"
+                        title={playlist.length > 0 ? (t.nextMediaBtn || 'Sonraki Video') : (t.closeMediaBtn || 'Medyayı Kapat')}
+                      >
+                        <X size={14} />
+                        <span className="hidden sm:inline">
+                          {playlist.length > 0 ? (t.nextMediaBtn || 'Sonraki') : (t.closeMediaBtn || 'Kapat')}
+                        </span>
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1173,6 +1352,7 @@ export default function App() {
         users={roomUsers}
         currentUserId={socket.id}
         isHost={roomData.isHost}
+        canTransferHost={(currentMedia.type === 'NONE' && !isLiveStreamActive && !localVideoUrl) || !!activeGame}
         onTransferHost={(newHostId) => socket.emit('room:transfer_host', { newHostId })}
         onToggleMute={(targetId) => socket.emit('room:toggle_mute', { targetId })}
         onKick={(targetId) => socket.emit('room:kick_user', { targetId })}

@@ -2,7 +2,7 @@ import React, { useRef, useEffect, useState } from 'react';
 import Hls from 'hls.js';
 import { 
   Volume2, VolumeX, Maximize2, Minimize2, Wand2, 
-  Subtitles, Zap, Gauge, Settings as SettingsIcon, Check 
+  Subtitles, Zap, Gauge, Settings as SettingsIcon, Check, RefreshCw 
 } from 'lucide-react';
 import { translations } from '../locales/translations';
 
@@ -44,22 +44,37 @@ export function parseVideoUrl(url) {
   return { type: 'DIRECT', url: cleanUrl };
 }
 
+// Güvenli YouTube API Yükleyicisi (Event kaçırmayan 50ms polling)
 function loadYouTubeIframeAPI(callback) {
+  if (typeof window === 'undefined') return;
+
   if (window.YT && window.YT.Player) {
     callback();
     return;
   }
+
+  const timer = setInterval(() => {
+    if (window.YT && window.YT.Player) {
+      clearInterval(timer);
+      callback();
+    }
+  }, 50);
+
+  const prev = window.onYouTubeIframeAPIReady;
+  window.onYouTubeIframeAPIReady = () => {
+    if (prev) prev();
+    clearInterval(timer);
+    callback();
+  };
+
   if (!document.getElementById('yt-script-tag')) {
     const tag = document.createElement('script');
     tag.id = 'yt-script-tag';
     tag.src = 'https://www.youtube.com/iframe_api';
     document.body.appendChild(tag);
   }
-  const prevCallback = window.onYouTubeIframeAPIReady;
-  window.onYouTubeIframeAPIReady = () => {
-    if (prevCallback) prevCallback();
-    callback();
-  };
+
+  setTimeout(() => clearInterval(timer), 12000);
 }
 
 export default function VideoPlayer({ 
@@ -84,8 +99,9 @@ export default function VideoPlayer({
   const videoRef = useRef(null);
   const streamVideoRef = useRef(null);
   const localHostVideoRef = useRef(null);
-  const ytIframeRef = useRef(null);
+  const ytWrapperRef = useRef(null);
   const ytPlayerRef = useRef(null);
+  const isPlayerReadyRef = useRef(false);
   const hlsRef = useRef(null);
   const isSyncingRef = useRef(false);
 
@@ -107,24 +123,17 @@ export default function VideoPlayer({
   const [currentSpeed, setCurrentSpeed] = useState(1.0);
 
   const parsedMedia = parseVideoUrl(sourceUrl);
+  const isYt = parsedMedia.type === 'YOUTUBE' && !isLiveStreamActive && !localVideoUrl;
 
   const sendYtCommand = (func, args = []) => {
-    if (ytPlayerRef.current && typeof ytPlayerRef.current[func] === 'function') {
+    if (ytPlayerRef.current && isPlayerReadyRef.current && typeof ytPlayerRef.current[func] === 'function') {
       try {
         ytPlayerRef.current[func](...args);
       } catch (e) {}
     }
-    if (ytIframeRef.current?.contentWindow) {
-      try {
-        ytIframeRef.current.contentWindow.postMessage(
-          JSON.stringify({ event: 'command', func, args }),
-          '*'
-        );
-      } catch (e) {}
-    }
   };
 
-  // Host'un yerel videosundan WebRTC akışını yakalayıp odaya dağıtma
+  // Host Yerel Dosya Yayını (WebRTC)
   useEffect(() => {
     if (!localVideoUrl || !isHost || !localHostVideoRef.current) return;
     const videoEl = localHostVideoRef.current;
@@ -147,48 +156,74 @@ export default function VideoPlayer({
     }
   }, [localVideoUrl, isHost]);
 
-  // YouTube IFrame API
+  // YouTube Oynatıcı Yönetimi (Tekil Kurulum + loadVideoById Entegrasyonu)
   useEffect(() => {
-    if (parsedMedia.type !== 'YOUTUBE' || isLiveStreamActive) return;
     const ytId = parsedMedia.id;
-    if (!ytId) return;
+
+    if (!isYt || !ytId) {
+      if (ytPlayerRef.current && isPlayerReadyRef.current) {
+        try { ytPlayerRef.current.pauseVideo(); } catch (e) {}
+      }
+      return;
+    }
 
     let isCancelled = false;
 
     loadYouTubeIframeAPI(() => {
-      if (isCancelled) return;
+      if (isCancelled || !ytWrapperRef.current) return;
 
-      if (ytPlayerRef.current && typeof ytPlayerRef.current.loadVideoById === 'function') {
+      // 1. Oynatıcı zaten kurulmuşsa sadece videoyu değiştir (DOM'a asla dokunma)
+      if (ytPlayerRef.current && isPlayerReadyRef.current && typeof ytPlayerRef.current.loadVideoById === 'function') {
         try {
-          ytPlayerRef.current.loadVideoById({
-            videoId: ytId,
-            startSeconds: playbackState?.currentTime || 0
-          });
-          if (playbackState?.state === 'PAUSED') {
-            ytPlayerRef.current.pauseVideo();
+          const currentLoadedId = ytPlayerRef.current.getVideoData?.()?.video_id;
+          if (currentLoadedId !== ytId) {
+            ytPlayerRef.current.loadVideoById({
+              videoId: ytId,
+              startSeconds: playbackState?.currentTime || 0
+            });
+            if (isHost || playbackState?.state === 'PLAYING') {
+              ytPlayerRef.current.playVideo();
+            } else {
+              ytPlayerRef.current.pauseVideo();
+            }
           }
-        } catch (e) {}
+        } catch (e) {
+          console.error('loadVideoById hatası:', e);
+        }
         return;
       }
 
+      // 2. Oynatıcı henüz yoksa sıfırdan bir kez kur
+      let mountNode = document.getElementById('yt-player-iframe-node');
+      if (!mountNode) {
+        mountNode = document.createElement('div');
+        mountNode.id = 'yt-player-iframe-node';
+        mountNode.className = 'w-full h-full';
+        ytWrapperRef.current.appendChild(mountNode);
+      }
+
       try {
-        ytPlayerRef.current = new window.YT.Player('yt-player-target', {
+        ytPlayerRef.current = new window.YT.Player(mountNode, {
+          width: '100%',
+          height: '100%',
           videoId: ytId,
           host: 'https://www.youtube.com',
           playerVars: {
-            autoplay: playbackState?.state === 'PLAYING' ? 1 : 0,
+            autoplay: isHost || playbackState?.state === 'PLAYING' ? 1 : 0,
             controls: isHost ? 1 : 0,
             disablekb: isHost ? 0 : 1,
             enablejsapi: 1,
             rel: 0,
-            playsinline: 1
+            playsinline: 1,
+            origin: typeof window !== 'undefined' ? window.location.origin : ''
           },
           events: {
             onReady: (e) => {
               if (isCancelled) return;
+              isPlayerReadyRef.current = true;
               const targetTime = playbackState?.currentTime || 0;
-              e.target.seekTo(targetTime, true);
-              if (playbackState?.state === 'PLAYING') {
+              if (targetTime > 0) e.target.seekTo(targetTime, true);
+              if (isHost || playbackState?.state === 'PLAYING') {
                 e.target.playVideo();
               } else {
                 e.target.pauseVideo();
@@ -208,17 +243,19 @@ export default function VideoPlayer({
             }
           }
         });
-      } catch (err) {}
+      } catch (err) {
+        console.error('YouTube Player oluşturma hatası:', err);
+      }
     });
 
     return () => {
       isCancelled = true;
     };
-  }, [parsedMedia.id, parsedMedia.type, isHost, isLiveStreamActive]);
+  }, [parsedMedia.id, isYt, isHost]);
 
   // MP4 / HLS Video
   useEffect(() => {
-    if (isLiveStreamActive || parsedMedia.type !== 'DIRECT' || !sourceUrl || !videoRef.current) return;
+    if (isLiveStreamActive || localVideoUrl || parsedMedia.type !== 'DIRECT' || !sourceUrl || !videoRef.current) return;
     const video = videoRef.current;
 
     if (hlsRef.current) {
@@ -249,15 +286,14 @@ export default function VideoPlayer({
     return () => {
       if (hlsRef.current) hlsRef.current.destroy();
     };
-  }, [sourceUrl, isLiveStreamActive, parsedMedia.type]);
+  }, [sourceUrl, isLiveStreamActive, localVideoUrl, parsedMedia.type]);
 
   // Misafir Senkronizasyonu
   useEffect(() => {
-    if (!playbackState || isLiveStreamActive || isHost) return;
+    if (!playbackState || isLiveStreamActive || localVideoUrl || isHost) return;
     isSyncingRef.current = true;
 
     let targetTime = playbackState.currentTime || 0;
-
     if (playbackState.state === 'PLAYING' && playbackState.timestamp) {
       const elapsed = (Date.now() - playbackState.timestamp) / 1000;
       if (elapsed > 0 && elapsed < 4) {
@@ -301,7 +337,7 @@ export default function VideoPlayer({
     }
 
     setTimeout(() => { isSyncingRef.current = false; }, 200);
-  }, [playbackState, isHost, parsedMedia.type, isLiveStreamActive, currentSpeed]);
+  }, [playbackState, isHost, parsedMedia.type, isLiveStreamActive, localVideoUrl, currentSpeed]);
 
   const handleSpeedChange = (speed) => {
     if (!isHost) return;
@@ -323,7 +359,6 @@ export default function VideoPlayer({
     setShowSpeedMenu(false);
   };
 
-  // Ses ayarını hem normal oynatıcıya hem de canlı yayın/misafir oynatıcısına uygula
   const handleVolumeChange = (newVol) => {
     setLocalVolume(newVol);
     setIsLocalMuted(newVol === 0);
@@ -432,6 +467,17 @@ export default function VideoPlayer({
     setTimeout(() => setSyncToast(false), 2000);
   };
 
+  const handleRetryVideo = () => {
+    const ytId = parsedMedia.id;
+    if (ytPlayerRef.current && isPlayerReadyRef.current && ytId) {
+      try {
+        ytPlayerRef.current.loadVideoById({ videoId: ytId, startSeconds: 0 });
+        ytPlayerRef.current.playVideo();
+      } catch (e) {}
+    }
+  };
+
+  // Lazer Render Döngüsü (Yerel Saat Tabanlı)
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -443,11 +489,15 @@ export default function VideoPlayer({
       const now = Date.now();
 
       if (laserPoints.current.length > 0) {
-        laserPoints.current = laserPoints.current.filter((p) => now - p.time < 600);
+        laserPoints.current.forEach((p) => {
+          if (!p.localTime) p.localTime = now;
+        });
+
+        laserPoints.current = laserPoints.current.filter((p) => now - p.localTime < 600);
 
         laserPoints.current.forEach((p) => {
-          const age = now - p.time;
-          const opacity = Math.max(1 - age / 600, 0);
+          const age = Math.max(0, Math.min(600, now - p.localTime));
+          const opacity = Math.max(0, 1 - age / 600);
           const x = p.x * canvas.width;
           const y = p.y * canvas.height;
 
@@ -456,7 +506,7 @@ export default function VideoPlayer({
           ctx.arc(x, y, 6 * opacity, 0, Math.PI * 2);
           ctx.fillStyle = p.color || '#ef4444';
           ctx.globalAlpha = opacity;
-          ctx.shadowBlur = 10;
+          ctx.shadowBlur = 10 * opacity;
           ctx.shadowColor = p.color || '#ef4444';
           ctx.fill();
           ctx.restore();
@@ -467,17 +517,21 @@ export default function VideoPlayer({
     };
 
     renderLaser();
-    return () => { if (animId) cancelAnimationFrame(animId); };
+    return () => {
+      if (animId) cancelAnimationFrame(animId);
+    };
   }, [laserPoints]);
 
   const handlePointerDown = (e) => {
     if (!isLaserMode) return;
     isMouseDownRef.current = true;
+    e.target.setPointerCapture?.(e.pointerId);
     handlePointerMove(e);
   };
 
-  const handlePointerUp = () => {
+  const handlePointerUp = (e) => {
     isMouseDownRef.current = false;
+    e.target.releasePointerCapture?.(e.pointerId);
   };
 
   const handlePointerMove = (e) => {
@@ -486,7 +540,8 @@ export default function VideoPlayer({
     const x = (e.clientX - rect.left) / rect.width;
     const y = (e.clientY - rect.top) / rect.height;
 
-    const point = { x, y, color: userColor || '#ef4444', time: Date.now() };
+    const now = Date.now();
+    const point = { x, y, color: userColor || '#ef4444', time: now, localTime: now };
     laserPoints.current.push(point);
     onLaserEmit(point);
   };
@@ -515,14 +570,15 @@ export default function VideoPlayer({
     }
   }, [peerStream]);
 
+  // Host Medya Durumu Bildirimi
   useEffect(() => {
-    if (!isHost || isLiveStreamActive) return;
+    if (!isHost || isLiveStreamActive || localVideoUrl) return;
 
     const interval = setInterval(() => {
       let time = 0;
       let state = 'PAUSED';
 
-      if (parsedMedia.type === 'YOUTUBE' && ytPlayerRef.current?.getCurrentTime) {
+      if (parsedMedia.type === 'YOUTUBE' && ytPlayerRef.current?.getCurrentTime && isPlayerReadyRef.current) {
         try {
           time = ytPlayerRef.current.getCurrentTime() || 0;
           const pState = ytPlayerRef.current.getPlayerState();
@@ -542,7 +598,7 @@ export default function VideoPlayer({
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [isHost, parsedMedia.type, sourceUrl, isLiveStreamActive, currentSpeed, onStateChange]);
+  }, [isHost, parsedMedia.type, sourceUrl, isLiveStreamActive, localVideoUrl, currentSpeed, onStateChange]);
 
   return (
     <div 
@@ -551,8 +607,8 @@ export default function VideoPlayer({
         isFullscreen ? 'rounded-none border-0' : ''
       }`}
     >
-      {/* 1. YEREL DOSYA YAYINI (HOST İÇİN TÜM VİDEO KONTROLLERİ AKTİF) */}
-      {localVideoUrl && isHost ? (
+      {/* 1. YEREL DOSYA YAYINI (HOST) */}
+      {localVideoUrl && isHost && (
         <div className="absolute inset-0 w-full h-full bg-black flex items-center justify-center">
           <video
             ref={localHostVideoRef}
@@ -563,8 +619,10 @@ export default function VideoPlayer({
             className="w-full h-full object-contain pointer-events-auto"
           />
         </div>
-      ) : isLiveStreamActive ? (
-        /* 2. CANLI EKRAN VEYA MİSAFİR İÇİN YEREL VİDEO AKIŞI */
+      )}
+
+      {/* 2. CANLI EKRAN / YEREL VİDEO AKIŞI (MİSAFİR) */}
+      {isLiveStreamActive && !localVideoUrl && (
         <div className="absolute inset-0 w-full h-full flex items-center justify-center bg-black">
           <video ref={streamVideoRef} autoPlay playsInline muted={isHost} className="w-full h-full object-contain" />
           {needsUserUnmute && (
@@ -582,14 +640,22 @@ export default function VideoPlayer({
             </button>
           )}
         </div>
-     ) : parsedMedia.type === 'YOUTUBE' ? (
-        /* 3. YOUTUBE OYNATICI */
-        <div className="absolute inset-0 w-full h-full bg-black flex items-center justify-center">
-          <div id="yt-player-target" className="w-full h-full pointer-events-auto" />
-          {!isHost && <div className="absolute inset-0 z-20 bg-transparent pointer-events-auto cursor-default" />}
-        </div>
-      ) : parsedMedia.embedUrl ? (
-        /* 4. TWITCH / VIMEO */
+      )}
+
+      {/* 3. YOUTUBE OYNATICI (Sanal DOM dışı izole wrapper - ASLA UNMOUNT EDİLMEZ, removeChild İMKANSIZDIR) */}
+      <div 
+        style={{ display: isYt ? 'block' : 'none' }}
+        className="absolute inset-0 w-full h-full bg-black z-10"
+      >
+        <div 
+          ref={ytWrapperRef} 
+          className="w-full h-full [&>iframe]:w-full [&>iframe]:h-full [&>iframe]:border-0" 
+        />
+        {!isHost && <div className="absolute inset-0 z-20 bg-transparent pointer-events-auto cursor-default" />}
+      </div>
+
+      {/* 4. TWITCH / VIMEO */}
+      {!isLiveStreamActive && !localVideoUrl && parsedMedia.embedUrl && (
         <div className="absolute inset-0 w-full h-full bg-black">
           <iframe
             key={parsedMedia.embedUrl}
@@ -601,8 +667,10 @@ export default function VideoPlayer({
           />
           {!isHost && <div className="absolute inset-0 z-20 bg-transparent pointer-events-auto cursor-default" />}
         </div>
-      ) : parsedMedia.type === 'DIRECT' && sourceUrl ? (
-        /* 5. DOĞRUDAN MP4 / HLS */
+      )}
+
+      {/* 5. DOĞRUDAN MP4 / HLS */}
+      {!isLiveStreamActive && !localVideoUrl && parsedMedia.type === 'DIRECT' && sourceUrl && (
         <div className="absolute inset-0 w-full h-full bg-black flex items-center justify-center">
           <video
             ref={videoRef}
@@ -616,8 +684,10 @@ export default function VideoPlayer({
           />
           {!isHost && <div className="absolute inset-0 z-20 bg-transparent pointer-events-auto cursor-default" />}
         </div>
-      ) : (
-        /* 6. BOŞ DURUM */
+      )}
+
+      {/* 6. BOŞ MEDYA DURUMU */}
+      {!isLiveStreamActive && !localVideoUrl && parsedMedia.type === 'NONE' && (
         <div className="absolute inset-0 w-full h-full flex flex-col items-center justify-center gap-1.5 text-center p-4 text-gray-500 text-xs">
           <span className="font-semibold text-gray-400">{t.noMediaTitle}</span>
           <span className="text-[11px] text-gray-600">{t.noMediaDesc}</span>
@@ -676,7 +746,20 @@ export default function VideoPlayer({
             <span className="hidden sm:inline">{isLaserMode ? t.laserOn : t.laser}</span>
           </button>
 
-          {isHost && (sourceUrl || isLiveStreamActive) && (
+          {/* Host için Yeniden Dene Butonu */}
+          {isHost && isYt && (
+            <button
+              type="button"
+              onClick={handleRetryVideo}
+              className="bg-black/75 hover:bg-black/90 text-amber-300 p-2 rounded-xl backdrop-blur-md border border-white/10 text-xs font-bold flex items-center gap-1 cursor-pointer shadow-lg active:scale-95 transition-transform"
+              title={t.retryVideo || 'Yeniden Dene'}
+            >
+              <RefreshCw size={14} />
+              <span className="hidden md:inline">{t.retryVideo || 'Yeniden Dene'}</span>
+            </button>
+          )}
+
+          {isHost && (sourceUrl || isLiveStreamActive || localVideoUrl) && (
             <div className="relative">
               <button
                 onClick={() => setShowSpeedMenu((p) => !p)}
@@ -706,14 +789,14 @@ export default function VideoPlayer({
             </div>
           )}
 
-          {!isHost && (sourceUrl || isLiveStreamActive) && (
+          {!isHost && (sourceUrl || isLiveStreamActive || localVideoUrl) && (
             <button
               onClick={handleJumpToHost}
               className="bg-amber-500/90 hover:bg-amber-400 text-black font-black px-2.5 py-1.5 rounded-xl backdrop-blur-md border border-amber-300 text-xs flex items-center gap-1 cursor-pointer shadow-lg transition-transform active:scale-95"
               title={t.syncHostTitle}
             >
               <Zap size={14} fill="currentColor" />
-              <span>{t.syncHost}</span>
+              <span className="hidden sm:inline">{t.syncHost}</span>
             </button>
           )}
         </div>

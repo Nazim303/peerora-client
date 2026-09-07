@@ -48,6 +48,8 @@ showCard: "Kartı Göster",
 spectatorNotice: "Şu anda odada bir oyun oynanıyor. Lütfen bu turun tamamlanmasını bekleyin...",
 waitingForRound: "Oyun Devam Ediyor",
 
+retryVideo: "Yeniden Dene",
+
    // translations.js içine (tr nesnesine):
     gamesTitle: "Mini Oyunlar",
     gamesBtn: "Oyunlar",
@@ -96,6 +98,10 @@ newRoundBtn: "Yeni Tur Başlat",
     githubProfile: "GitHub Profilim",
     contactEmail: "İletişim / E-Posta",
 
+    shareRoom: "Davet Et",
+shareLinkCopied: "Link Kopyalandı!",
+inviteShareText: "seni Peerora'da birlikte video izlemeye davet ediyor!",
+
     gamerUpdateBadge: "v1.1 Gamer Update 🎮",
 changelogTitle: "Peerora v1.1 - Gamer Update",
 changelogSubtitle: "İlk büyük güncelleme yayında!",
@@ -108,6 +114,15 @@ featureConnectionDesc: "Render uyku modunu tek tıkla uyandıran ping mekanizmas
 featureMobileOptTitle: "📱 Mobil Arayüz & Ekran Paylaşımı İyileştirmeleri",
 featureMobileOptDesc: "Mobil cihazlarda desteklenmeyen ekran paylaşım butonu kaldırıldı; oyun sahneleri ve kontroller küçük ekranlara tam uyumlu hale getirildi.",
 closeBtn: "Kapat",
+gamerUpdateBadge: "v1.1.1 Hotfix 🛠️",
+changelogTitle: "Peerora v1.1.1 - Kararlılık Güncellemesi",
+changelogSubtitle: "Topluluk geri bildirimleriyle kritik hatalar giderildi!",
+closeMediaBtn: "Medyayı Kapat",
+nextMediaBtn: "Sonraki Videoya Geç",
+voiceMutedBadge: "Mikrofonu Kapatıldı",
+micMutedByHostNotice: "Oda lideri mikrofonunuzu kapattı.",
+cannotTransferHostMediaNotice: "Ekranda aktif bir video varken liderlik devredilemez. Önce videoyu kapatın veya bir mini oyun başlatın.",
+refreshRoomWarning: "Sayfayı yenilerseniz odadan çıkacaksınız. Emin misiniz?",
     // Video Oynatıcı
     noMediaTitle: "Henüz Medya Seçilmedi",
     noMediaDesc: "YouTube, Twitch, Vimeo veya MP4 linki yükleyin",
@@ -220,6 +235,8 @@ showCard: "Show Card",
 spectatorNotice: "A game is currently in progress. Please wait for this round to finish...",
 waitingForRound: "Game in Progress",
 
+retryVideo: "Retry",
+
 // translations.js içine (en nesnesine):
     gamesTitle: "Mini Games",
     gamesBtn: "Games",
@@ -268,6 +285,10 @@ newRoundBtn: "Start New Round",
     githubProfile: "GitHub Profile",
     contactEmail: "Contact / E-Mail",
 
+    shareRoom: "Invite",
+shareLinkCopied: "Link Copied!",
+inviteShareText: "invites you to watch together on Peerora!",
+
     gamerUpdateBadge: "v1.1 Gamer Update 🎮",
 changelogTitle: "Peerora v1.1 - Gamer Update",
 changelogSubtitle: "First major update is live!",
@@ -280,6 +301,15 @@ featureConnectionDesc: "Integrated background ping wakeup for sleeping servers a
 featureMobileOptTitle: "📱 Mobile Interface & Screen Share Tweaks",
 featureMobileOptDesc: "Removed non-functional screen share buttons on mobile devices; game canvases and dialogue cards are now fully responsive.",
 closeBtn: "Close",
+gamerUpdateBadge: "v1.1.1 Hotfix 🛠️",
+changelogTitle: "Peerora v1.1.1 - Stability Patch",
+changelogSubtitle: "Critical bugs fixed based on community reports!",
+closeMediaBtn: "Close Media",
+nextMediaBtn: "Play Next Media",
+voiceMutedBadge: "Voice Muted",
+micMutedByHostNotice: "The host has muted your microphone.",
+cannotTransferHostMediaNotice: "Host cannot be transferred while video is active. Please close the media or start a game first.",
+refreshRoomWarning: "Refreshing will disconnect you from the room. Are you sure?",
 
     // Video Player
     noMediaTitle: "No Media Selected Yet",
