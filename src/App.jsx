@@ -207,7 +207,7 @@ export default function App() {
       };
     }
     return {
-      url: 'https://github.com/Nazim303/peerora/releases', // Windows .exe indirme linkiniz
+      url: 'https://github.com/Nazim303/peerora-client/releases', // Windows .exe indirme linki
       label: t.downloadWindows || 'Windows İndir (.exe)',
       icon: <Monitor size={14} />
     };
