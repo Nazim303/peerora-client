@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, Palette, User, Settings as SettingsIcon, Languages } from 'lucide-react';
+import { X, Palette, User, Settings as SettingsIcon, Languages, Bell, BellOff } from 'lucide-react';
 import { THEMES } from '../themeConfig';
 import { translations } from '../locales/translations';
 
@@ -15,7 +15,9 @@ export default function SettingsModal({
   selectedTheme, 
   onThemeChange,
   lang,
-  onLangChange
+  onLangChange,
+  notificationsEnabled,
+  onToggleNotifications
 }) {
   if (!isOpen) return null;
 
@@ -36,6 +38,31 @@ export default function SettingsModal({
         </div>
 
         <div className="space-y-4 my-3 overflow-y-auto pr-1">
+          {/* Bildirim Aç/Kapat Anahtarı */}
+          <div className="p-3 rounded-xl border border-black/10 bg-black/5 flex items-center justify-between">
+            <div className="flex flex-col pr-2">
+              <span className="text-xs font-bold flex items-center gap-1.5">
+                {notificationsEnabled ? <Bell size={14} className="text-emerald-600" /> : <BellOff size={14} className="text-rose-500" />}
+                {t.notificationsSetting || "Uygulama Bildirimleri"}
+              </span>
+              <span className="text-[10px] opacity-70">
+                {t.notificationsDesc || "Ekrana çağırma, video başlangıcı ve hatırlatma bildirimleri."}
+              </span>
+            </div>
+
+            <button
+              type="button"
+              onClick={onToggleNotifications}
+              className={`px-3 py-1.5 rounded-xl text-xs font-black cursor-pointer transition-all ${
+                notificationsEnabled 
+                  ? 'bg-emerald-600 text-white shadow-sm' 
+                  : 'bg-black/15 text-black opacity-60'
+              }`}
+            >
+              {notificationsEnabled ? (t.notificationsEnabled || "Açık") : (t.notificationsDisabled || "Kapalı")}
+            </button>
+          </div>
+
           {/* Dil Seçici */}
           <div>
             <label className="text-xs font-bold flex items-center gap-1.5 mb-2">
@@ -102,12 +129,12 @@ export default function SettingsModal({
                       : 'border border-black/10 hover:bg-black/5 opacity-80'
                   }`}
                 >
-                 <div className="flex flex-col pr-2">
-  <span className="text-xs font-bold">{theme.name}</span>
-  <span className="text-[10px] opacity-75">
-    {typeof theme.desc === 'object' ? (theme.desc[lang] || theme.desc.en) : theme.desc}
-  </span>
-</div>
+                  <div className="flex flex-col pr-2">
+                    <span className="text-xs font-bold">{theme.name}</span>
+                    <span className="text-[10px] opacity-75">
+                      {typeof theme.desc === 'object' ? (theme.desc[lang] || theme.desc.en) : theme.desc}
+                    </span>
+                  </div>
                   <span className={`w-4 h-4 rounded-full shrink-0 ${theme.previewAccent}`} />
                 </button>
               ))}

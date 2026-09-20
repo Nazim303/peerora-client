@@ -138,5 +138,28 @@ export const THEMES = {
     videoContainer: 'border-3 border-black shadow-[6px_6px_0px_#000] rounded-xl',
     badge: 'bg-black text-white font-bold',
     previewAccent: 'bg-black border-2 border-dashed border-white'
+  },
+
+  cozy_japan: {
+    id: 'cozy_japan',
+    name: 'Cozy Japan (Wabi-Sabi)',
+    desc: {
+      tr: 'Yatıştırıcı matcha yeşili, sütlü krem pirinç kağıdı tonları ve huzurlu wabi-sabi estetiği.',
+      en: 'Soothing matcha green, warm rice paper tones, and peaceful Japanese wabi-sabi aesthetics.'
+    },
+    bg: 'bg-[#ebe7df]',
+    textColor: 'text-[#2d3a2e]',
+    panel: 'bg-[#f7f6f2] border-2 border-[#a3b19b] shadow-[4px_4px_0px_#8a9a84] rounded-2xl',
+    headerPanel: 'bg-[#5b7058] text-white border-2 border-[#475744] shadow-[3px_3px_0px_#2d3a2e] rounded-2xl',
+    buttonPrimary: 'bg-[#5b7058] hover:bg-[#4a5c47] text-white font-bold rounded-xl border-2 border-[#3d4b3a] shadow-[2px_2px_0px_#2d3a2e] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all',
+    buttonSecondary: 'bg-[#d8e0d5] hover:bg-[#c9d4c5] text-[#2d3a2e] font-bold border-2 border-[#a3b19b] rounded-xl shadow-[2px_2px_0px_#8a9a84] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all',
+    input: 'bg-white border-2 border-[#a3b19b] text-[#2d3a2e] font-bold rounded-xl placeholder:text-[#8a9a84] focus:border-[#5b7058]',
+    chatMe: 'bg-[#5b7058] text-white border border-[#475744] rounded-2xl rounded-tr-none shadow-sm',
+    chatOther: 'bg-[#e2e7df] text-[#2d3a2e] border border-[#a3b19b] rounded-2xl rounded-tl-none shadow-sm',
+    videoContainer: 'border-2 border-[#a3b19b] shadow-lg rounded-2xl',
+    badge: 'bg-[#5b7058]/15 text-[#3e4f3c] border border-[#5b7058]/40 font-bold',
+    previewAccent: 'bg-[#5b7058] border-2 border-[#3d4b3a]'
   }
+
+  
 };

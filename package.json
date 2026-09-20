@@ -1,13 +1,16 @@
 {
-  "name": "client",
+  "name": "peerora-client",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.2.0",
   "type": "module",
+  "main": "electron.cjs",
+  
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "build:exe": "npm run build && electron-builder --win portable"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.0",
@@ -29,10 +32,28 @@
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
     "@vitejs/plugin-react": "^6.1.0",
+    "electron": "^44.4.3",
+    "electron-builder": "^26.15.3",
     "eslint": "^10.9.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.4",
     "globals": "^17.11.0",
     "vite": "^8.2.2"
+  },
+  "build": {
+    "appId": "com.theosdev.peerora",
+    "productName": "Peerora",
+    "directories": {
+      "output": "release-exe"
+    },
+    "files": [
+      "dist/**/*",
+      "electron.cjs",
+      "public/**/*"
+    ],
+    "win": {
+      "target": "portable",
+      "icon": "public/favicon.ico"
+    }
   }
 }

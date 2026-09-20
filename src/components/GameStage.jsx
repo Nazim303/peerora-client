@@ -1,5 +1,8 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { Trash2, StopCircle, Clock, Eye, EyeOff, Hourglass, Vote, Trophy, RefreshCw, CheckCircle2 } from 'lucide-react';
+import { 
+  Trash2, StopCircle, Clock, Eye, EyeOff, Hourglass, 
+  Vote, Trophy, RefreshCw, CheckCircle2, Bomb, Flame, AlertCircle 
+} from 'lucide-react';
 import { translations } from '../locales/translations';
 
 export default function GameStage({ game, socket, isHost, userColor, onEndGame, lang = 'tr' }) {
@@ -8,6 +11,7 @@ export default function GameStage({ game, socket, isHost, userColor, onEndGame, 
   const isDrawingRef = useRef(false);
   const [showRole, setShowRole] = useState(true);
 
+  // Spyfall State'leri
   const [spyPhase, setSpyPhase] = useState(game?.phase || 'PLAYING');
   const [timeLeft, setTimeLeft] = useState(300);
   const [playerList, setPlayerList] = useState(game?.users || []);
@@ -15,7 +19,13 @@ export default function GameStage({ game, socket, isHost, userColor, onEndGame, 
   const [voteProgress, setVoteProgress] = useState({ votedCount: 0, totalCount: game?.users?.length || 0 });
   const [gameResult, setGameResult] = useState(null);
 
+  // Word Bomb State'leri
+  const [wbData, setWbData] = useState(game?.type === 'WORDBOMB' ? game : null);
+  const [wbTimeLeft, setWbTimeLeft] = useState(10);
+  const [wbExplodedResult, setWbExplodedResult] = useState(null);
+
   const isMyTurnToDraw = game?.type === 'DOODLE' && game.drawerId === socket.id;
+  const isMyBombTurn = wbData?.type === 'WORDBOMB' && wbData.currentTurnId === socket.id;
 
   // Yeni Tur Başladığında State'leri ve Sayacı Sıfırla
   useEffect(() => {
@@ -32,10 +42,16 @@ export default function GameStage({ game, socket, isHost, userColor, onEndGame, 
         setTimeLeft(Math.max(Math.round((game.endTime - Date.now()) / 1000), 0));
       }
       if (game.users) setPlayerList(game.users);
+    } else if (game?.type === 'WORDBOMB') {
+      setWbData(game);
+      setWbExplodedResult(null);
+      if (game.turnEndTime) {
+        setWbTimeLeft(Math.max(Math.round((game.turnEndTime - Date.now()) / 1000), 0));
+      }
     }
   }, [game]);
 
-  // Çiz & Bil Tuval Dinleyicileri (drawerId değiştikçe taze dinleyici bağlar)
+  // Çiz & Bil Tuval Dinleyicileri
   useEffect(() => {
     if (game?.type !== 'DOODLE' || game.isSpectator) return;
     const canvas = canvasRef.current;
@@ -65,34 +81,48 @@ export default function GameStage({ game, socket, isHost, userColor, onEndGame, 
     };
   }, [game?.type, game?.isSpectator, game?.drawerId, socket]);
 
-  // Spyfall Soket Dinleyicileri
+  // Spyfall ve Wordbomb Soket Dinleyicileri
   useEffect(() => {
-    if (game?.type !== 'SPYFALL') return;
-
+    // Spyfall
     const onPhaseChange = ({ phase, endTime, users }) => {
       setSpyPhase(phase);
       if (users) setPlayerList(users);
       setSelectedVoteId(null);
     };
-
     const onVoteProgress = (data) => setVoteProgress(data);
     const onResult = (resultData) => {
       setSpyPhase('RESULT');
       setGameResult(resultData);
     };
 
+    // Wordbomb
+    const onWbTurn = (updatedGame) => {
+      setWbData(updatedGame);
+      if (updatedGame.turnEndTime) {
+        setWbTimeLeft(Math.max(Math.round((updatedGame.turnEndTime - Date.now()) / 1000), 0));
+      }
+    };
+    const onWbExploded = (result) => {
+      setWbExplodedResult(result);
+    };
+
     socket.on('game:spyfall_phase_change', onPhaseChange);
     socket.on('game:spyfall_vote_progress', onVoteProgress);
     socket.on('game:spyfall_result', onResult);
+
+    socket.on('game:wordbomb_turn', onWbTurn);
+    socket.on('game:wordbomb_exploded', onWbExploded);
 
     return () => {
       socket.off('game:spyfall_phase_change', onPhaseChange);
       socket.off('game:spyfall_vote_progress', onVoteProgress);
       socket.off('game:spyfall_result', onResult);
+      socket.off('game:wordbomb_turn', onWbTurn);
+      socket.off('game:wordbomb_exploded', onWbExploded);
     };
-  }, [game?.type, socket]);
+  }, [socket]);
 
-  // Geri Sayım Sayacı
+  // Spyfall Geri Sayım Sayacı
   useEffect(() => {
     if (game?.type !== 'SPYFALL' || spyPhase === 'RESULT' || !game.endTime) return;
 
@@ -109,9 +139,25 @@ export default function GameStage({ game, socket, isHost, userColor, onEndGame, 
     return () => clearInterval(timer);
   }, [game?.type, game?.endTime, spyPhase, isHost, socket]);
 
+  // Wordbomb 10 Saniye Sayacı (Zaman dolunca Host patlatır)
+  useEffect(() => {
+    if (wbData?.type !== 'WORDBOMB' || wbExplodedResult || !wbData.turnEndTime) return;
+
+    const timer = setInterval(() => {
+      const rem = Math.max(Math.round((wbData.turnEndTime - Date.now()) / 1000), 0);
+      setWbTimeLeft(rem);
+
+      if (rem <= 0) {
+        clearInterval(timer);
+        if (isHost) socket.emit('game:wordbomb_time_up');
+      }
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [wbData?.turnEndTime, wbData?.type, wbExplodedResult, isHost, socket]);
+
   const lastPosRef = useRef({ x: 0, y: 0 });
 
-  // Kesin ve Kaymasız Koordinat Hesaplama
   const getCanvasCoords = (e) => {
     const canvas = canvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
@@ -119,7 +165,6 @@ export default function GameStage({ game, socket, isHost, userColor, onEndGame, 
     const clientX = e.touches && e.touches.length > 0 ? e.touches[0].clientX : e.clientX;
     const clientY = e.touches && e.touches.length > 0 ? e.touches[0].clientY : e.clientY;
     
-    // Koordinatları 0..1 arasına sabitleyerek kenar taşmalarını engeller
     return {
       x: Math.max(0, Math.min(1, (clientX - rect.left) / rect.width)),
       y: Math.max(0, Math.min(1, (clientY - rect.top) / rect.height))
@@ -175,14 +220,17 @@ export default function GameStage({ game, socket, isHost, userColor, onEndGame, 
     socket.emit('game:spyfall_vote', { targetId });
   };
 
+  // Seyirci Ekranı (Oyun başladıktan sonra gelenler)
   if (game.isSpectator) {
     return (
-      <div className="relative w-full min-h-[260px] md:aspect-video bg-white rounded-2xl overflow-hidden shadow-2xl border-2 border-black flex flex-col items-center justify-center p-6 text-center gap-3 select-none">
+      <div className="relative w-full min-h-65 md:aspect-video bg-white rounded-2xl overflow-hidden shadow-2xl border-2 border-black flex flex-col items-center justify-center p-6 text-center gap-3 select-none">
         <div className="p-3 bg-amber-500/20 text-amber-700 rounded-2xl animate-bounce">
           <Hourglass size={32} />
         </div>
         <h3 className="text-sm font-black text-black uppercase tracking-wider">{t.waitingForRound}</h3>
-        <p className="text-xs text-black/70 max-w-xs">{t.spectatorNotice}</p>
+        <p className="text-xs text-black/70 max-w-xs">
+          {game.type === 'WORDBOMB' ? (t.wordbombSpectator || 'Kelime bombası turu oynanıyor...') : t.spectatorNotice}
+        </p>
         {isHost && (
           <button
             type="button"
@@ -197,16 +245,30 @@ export default function GameStage({ game, socket, isHost, userColor, onEndGame, 
   }
 
   return (
-    <div className="relative w-full min-h-[260px] md:aspect-video bg-white rounded-2xl overflow-hidden shadow-2xl border-2 border-black flex flex-col items-center justify-between p-2.5 sm:p-3 select-none">
-      {/* Üst Bar (Her Aşamada ve İki Oyunda da Görünür) */}
+    <div className="relative w-full min-h-65 md:aspect-video bg-white rounded-2xl overflow-hidden shadow-2xl border-2 border-black flex flex-col items-center justify-between p-2.5 sm:p-3 select-none">
+      {/* Üst Başlık Barı */}
       <div className="w-full flex items-center justify-between pb-2 border-b border-black/10 z-20 shrink-0">
         <div className="flex items-center gap-1.5 overflow-hidden pr-1">
           <span className="font-black text-xs text-black shrink-0">
-            {game.type === 'DOODLE' ? t.doodleGameTitle : t.spyfallGameTitle}
+            {game.type === 'DOODLE' 
+              ? t.doodleGameTitle 
+              : game.type === 'SPYFALL' 
+              ? t.spyfallGameTitle 
+              : (t.wordbombGameTitle || '💣 Kelime Bombası')}
           </span>
+
           {game.type === 'DOODLE' && (
             <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-black/10 text-black shrink-0">
               {isMyTurnToDraw ? `🎨 ${t.drawerRole}` : `👀 ${game.drawerName}`}
+            </span>
+          )}
+
+          {wbData?.type === 'WORDBOMB' && !wbExplodedResult && (
+            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md shrink-0 flex items-center gap-1 ${
+              isMyBombTurn ? 'bg-rose-600 text-white animate-pulse' : 'bg-black/10 text-black'
+            }`}>
+              <Bomb size={12} />
+              <span>{isMyBombTurn ? (t.wordbombTurn || 'Bomba Sende!') : `${t.wordbombWaitingTurn || 'Sıra:'} ${wbData.currentTurnName}`}</span>
             </span>
           )}
         </div>
@@ -246,7 +308,7 @@ export default function GameStage({ game, socket, isHost, userColor, onEndGame, 
         </div>
       </div>
 
-      {/* 1. ÇİZ & BİL */}
+      {/* 1. ÇİZ & BİL OYUNU */}
       {game.type === 'DOODLE' ? (
         <div className="relative w-full h-full flex items-center justify-center overflow-hidden">
           {isMyTurnToDraw && (
@@ -256,7 +318,6 @@ export default function GameStage({ game, socket, isHost, userColor, onEndGame, 
             </div>
           )}
 
-          {/* Tam 16:9 Oranında Kilitli ve Kaymasız Tuval Kapsayıcısı */}
           <div className="relative w-full aspect-video max-h-full flex items-center justify-center">
             <canvas
               ref={canvasRef}
@@ -273,8 +334,90 @@ export default function GameStage({ game, socket, isHost, userColor, onEndGame, 
             />
           </div>
         </div>
+      ) : game.type === 'WORDBOMB' ? (
+        /* 2. KELİME BOMBASI OYUNU */
+        wbExplodedResult ? (
+          /* Patlama Sonuç Ekranı */
+          <div className="flex-1 flex flex-col items-center justify-center p-3 text-center my-auto w-full max-w-sm gap-3">
+            <div className="p-3 rounded-2xl bg-rose-600 text-white border-2 border-black shadow-[4px_4px_0px_#000] animate-bounce">
+              <Flame size={32} />
+            </div>
+
+            <div className="space-y-1">
+              <h3 className="text-lg font-black text-rose-600 tracking-wider">
+                {t.wordbombExploded || '💥 BOMBA PATLADI!'}
+              </h3>
+              <p className="text-xs text-black/80 font-bold">
+                {t.wordbombEliminated || 'Kelimeyi bulamadı ve bomba elinde patladı:'}
+              </p>
+            </div>
+
+            <div className="p-3 bg-rose-100 border-2 border-black rounded-xl shadow-[3px_3px_0px_#000] w-full flex items-center justify-center gap-2">
+              <span className="text-2xl">{wbExplodedResult.loser.avatar}</span>
+              <span className="text-sm font-black text-black">{wbExplodedResult.loser.username}</span>
+            </div>
+
+            <p className="text-[11px] opacity-75 font-semibold text-black">
+              {t.wordbombUsedWords || 'Kullanılan Kelimeler:'} {wbExplodedResult.usedWordsCount}
+            </p>
+
+            {isHost && (
+              <button
+                type="button"
+                onClick={() => socket.emit('game:start', { gameType: 'WORDBOMB', lang })}
+                className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-black text-xs flex items-center gap-1.5 cursor-pointer shadow-[3px_3px_0px_#000] border-2 border-black active:scale-95 transition-transform"
+              >
+                <RefreshCw size={14} /> {t.newRoundBtn || 'Yeni Tur Başlat'}
+              </button>
+            )}
+          </div>
+        ) : (
+          /* Aktif Kelime Bombası Ekranı */
+          <div className="flex-1 flex flex-col items-center justify-center gap-3 text-center p-3 my-auto w-full max-w-md">
+            {/* Bomba ve Sayaç */}
+            <div className="relative flex flex-col items-center">
+              <div className={`p-4 rounded-3xl border-3 border-black shadow-[4px_4px_0px_#000] transition-all duration-300 ${
+                wbTimeLeft <= 3 
+                  ? 'bg-rose-500 text-white animate-ping' 
+                  : isMyBombTurn 
+                  ? 'bg-amber-400 text-black animate-bounce' 
+                  : 'bg-black text-white'
+              }`}>
+                <Bomb size={42} className={wbTimeLeft <= 3 ? 'text-white' : 'text-amber-400'} />
+              </div>
+              <span className={`text-xl font-mono font-black mt-1 ${wbTimeLeft <= 3 ? 'text-rose-600 animate-pulse' : 'text-black'}`}>
+                {wbTimeLeft}s
+              </span>
+            </div>
+
+            {/* İçinde Geçmesi Gereken Hece */}
+            <div className="p-3 bg-amber-200 border-2 border-black rounded-2xl shadow-[3px_3px_0px_#000] w-full">
+              <span className="text-[10px] sm:text-[11px] font-bold uppercase opacity-75 block mb-0.5 text-black">
+                {t.wordbombSyllable || 'İçinde Geçmesi Gereken Hece:'}
+              </span>
+              <span className="text-2xl sm:text-3xl font-black font-mono tracking-widest text-black underline decoration-rose-500">
+                "{wbData.syllable}"
+              </span>
+            </div>
+
+            {/* Kimin Sırası Bilgisi */}
+            <div className={`p-2.5 rounded-xl border-2 border-black w-full flex items-center justify-center gap-2 text-xs font-black shadow-[2px_2px_0px_#000] ${
+              isMyBombTurn ? 'bg-rose-600 text-white animate-pulse' : 'bg-black/5 text-black'
+            }`}>
+              <span className="text-lg">{wbData.currentTurnAvatar}</span>
+              <span>
+                {isMyBombTurn 
+                  ? (t.wordbombTurn || 'BOMBA SENDE! Çabuk chate yaz!') 
+                  : `${wbData.currentTurnName} chate kelime yazıyor...`}
+              </span>
+            </div>
+            <p className="text-[10px] text-black/60 font-semibold">
+              {t.wordbombChatHint || (lang === 'tr' ? '* Kelimeleri doğrudan sağdaki (mobilde aşağıdaki) Canlı Sohbete yazın.' : '* Type words directly into the Live Chat on the right (below on mobile).')}
+            </p>
+          </div>
+        )
       ) : spyPhase === 'PLAYING' ? (
-        /* 2. SPYFALL: TARTIŞMA */
+        /* 3. SPYFALL: TARTIŞMA */
         <div className="flex-1 flex flex-col items-center justify-center gap-2.5 sm:gap-4 text-center p-2 sm:p-4 my-auto w-full">
           <div className="flex items-center gap-1 text-sm sm:text-base font-mono font-black text-black">
             <Clock size={16} /> {Math.floor(timeLeft / 60)}:{String(timeLeft % 60).padStart(2, '0')}
@@ -301,7 +444,7 @@ export default function GameStage({ game, socket, isHost, userColor, onEndGame, 
           </button>
         </div>
       ) : spyPhase === 'VOTING' ? (
-        /* 3. SPYFALL: OYLAMA */
+        /* 4. SPYFALL: OYLAMA */
         <div className="flex-1 flex flex-col items-center justify-between p-3 w-full max-w-md my-auto gap-2">
           <div className="text-center space-y-0.5">
             <h3 className="text-xs sm:text-sm font-black text-black flex items-center justify-center gap-1.5">
@@ -354,7 +497,7 @@ export default function GameStage({ game, socket, isHost, userColor, onEndGame, 
           )}
         </div>
       ) : (
-        /* 4. SPYFALL: SONUÇ / KAZANAN EKRANI */
+        /* 5. SPYFALL: KAZANAN EKRANI */
         <div className="flex-1 flex flex-col items-center justify-center p-3 text-center my-auto w-full max-w-sm gap-2.5">
           <div className="flex items-center justify-center p-2.5 rounded-2xl bg-black text-amber-400 border-2 border-black shadow-[4px_4px_0px_#000]">
             <Trophy size={26} />

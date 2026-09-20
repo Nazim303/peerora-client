@@ -29,8 +29,17 @@ import {
   Radio, MonitorPlay, Square, Link2, Tv, Copy, Check, LogOut, 
   ListMusic, Crown, Settings, Users, BarChart2, Mic, MicOff, Dices, 
   History, Play, Compass, Sparkles, Globe, Lock, Film, Info, FileVideo,
-  X, AlertTriangle, Gamepad2, Share2 // <-- Eklendi
+  X, AlertTriangle, Gamepad2, Share2, BellRing, Download, Monitor, Smartphone// <-- Eklendi
 } from 'lucide-react';
+import { 
+  playNudgeChime, 
+  requestNotificationPermission, 
+  requestMediaAccessPermission, 
+  sendSystemNotification,
+  areNotificationsEnabled,
+  scheduleInactivityCheck
+} from './services/notificationService';
+import RatingModal from './components/RatingModal';
 import './App.css';
 
 const AVATAR_LIST = ['🐱', '🐶', '🦊', '🐼', '🦁', '🤖', '👾', '🦄', '🐲', '🧙‍♂️', '🥷', '🧑‍🚀', '🧛', '👑', '⭐'];
@@ -148,6 +157,8 @@ export default function App() {
   const [connectionStatus, setConnectionStatus] = useState(socket.connected ? 'connected' : 'connecting');
   const [copied, setCopied] = useState(false);
   const [shareCopied, setShareCopied] = useState(false);
+  const [nudgeToast, setNudgeToast] = useState(null);
+  const lastNudgeTimeRef = useRef(0);
 
   const laserPointsRef = useRef([]);
   const roomDataRef = useRef(roomData);
@@ -166,6 +177,42 @@ export default function App() {
     setActiveGame(null);
     socket.emit('game:end');
   };
+
+  const [isRatingModalOpen, setIsRatingModalOpen] = useState(false);
+
+  // Odadan çıkıldığında arada bir değerlendirme modalını açar
+  const checkShowRatingPrompt = () => {
+    const status = localStorage.getItem('p2p_rate_status');
+    if (status === 'rated' || status === 'never') return;
+
+    const exitCount = parseInt(localStorage.getItem('p2p_exit_count') || '0', 10) + 1;
+    localStorage.setItem('p2p_exit_count', exitCount.toString());
+
+    // Her 2 oda çıkışında bir tetiklenir
+    if (exitCount % 2 === 0) {
+      setTimeout(() => setIsRatingModalOpen(true), 600);
+    }
+  };
+
+  // Cihaza özel indirme bilgilerini algılar
+  const getPlatformDownload = () => {
+    if (typeof window === 'undefined') return null;
+    if (window.Capacitor?.isNativePlatform?.()) return null; // APK içinde indirme butonu gösterme
+    const isMobile = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    if (isMobile) {
+      return {
+        url: 'https://apkpure.com/p/com.theosdev.peerora',
+        label: t.downloadAndroid || 'Android APK İndir',
+        icon: <Smartphone size={14} />
+      };
+    }
+    return {
+      url: 'https://github.com/Nazim303/peerora/releases', // Windows .exe indirme linkiniz
+      label: t.downloadWindows || 'Windows İndir (.exe)',
+      icon: <Monitor size={14} />
+    };
+  };
+  const platformDownload = getPlatformDownload();
 
   const saveRecentRoom = (id) => {
     const updated = [id, ...recentRooms.filter((r) => r !== id)].slice(0, 4);
@@ -378,6 +425,23 @@ export default function App() {
       );
     });
 
+    // 1.2: Odaya girildiğinde bildirim izni iste
+    requestNotificationPermission();
+
+    // 1.2: Başka biri bizi ekrana çağırdığında (Nudge)
+    socket.on('room:nudged', ({ senderName }) => {
+      playNudgeChime(); // Sesli çan çal
+      
+      // Ekranda görsel toast göster
+      setNudgeToast(senderName);
+      setTimeout(() => setNudgeToast(null), 4500);
+
+      // Sekme arka plandaysa sistem bildirimi fırlat
+      if (document.hidden) {
+        sendSystemNotification('NUDGE', senderName);
+      }
+    });
+
     // 1.1.1: Cihaz saat farkını sıfırlayan yerel varış zamanı damgası
     socket.on('laser:point', (point) => {
       laserPointsRef.current.push({ ...point, localTime: Date.now() });
@@ -435,6 +499,7 @@ export default function App() {
       }, 2400);
     });
 
+
     socket.on('game:started', (gameData) => {
       stopScreenShare();
       cleanupLocalVideo();
@@ -472,8 +537,8 @@ export default function App() {
     };
   }, [isMicEnabled]);
 
+// Mikrofon Açma / Kapatma
   const handleToggleVoice = async () => {
-    // 1.1.1: Susturulan kullanıcı mikrofon açamaz
     if (isMuted) {
       alert(t.micMutedByHostNotice || 'Oda lideri mikrofonunuzu kapattı.');
       return;
@@ -507,6 +572,18 @@ export default function App() {
       setIsMicEnabled(false);
       setSpeakingUsers((prev) => ({ ...prev, [socket.id]: 0 }));
     }
+  };
+
+  // 1.2: Odadakileri Ekrana Çağır (Nudge / Ping) - Bağımsız Fonksiyon
+  const handleSendNudge = () => {
+    const now = Date.now();
+    if (now - lastNudgeTimeRef.current < 15000) {
+      alert(t.nudgeCooldownAlert || 'Biraz bekleyin, sık aralıklarla ekrana çağıramazsınız.');
+      return;
+    }
+    lastNudgeTimeRef.current = now;
+    playNudgeChime();
+    socket.emit('room:nudge');
   };
 
   const handleCreateRoom = () => {
@@ -601,6 +678,22 @@ export default function App() {
     }
   };
 
+  const [notificationsEnabled, setNotificationsEnabled] = useState(areNotificationsEnabled);
+
+  const handleToggleNotifications = () => {
+    const next = !notificationsEnabled;
+    setNotificationsEnabled(next);
+    localStorage.setItem('p2p_notifications_enabled', next ? 'true' : 'false');
+    if (next) {
+      requestNotificationPermission();
+    }
+  };
+
+  // Uygulama açıldığında hareketsizlik/geri dönüş kontrolünü çalıştır
+  useEffect(() => {
+    scheduleInactivityCheck();
+  }, []);
+
   const handleToggleStream = async () => {
     if (activeGame) {
       setActiveGame(null);
@@ -659,13 +752,14 @@ const handleLoadUrl = () => {
     setVideoUrlInput('');
   };
 
-  // 1.1.1: Sıradaki videoya geç veya aktif medyayı tamamen kapat
+
+// 1.1.1: Sıradaki videoya geç veya aktif medyayı tamamen kapat
   const handleCloseOrNextMedia = () => {
+    cleanupLocalVideo();
     if (playlist.length > 0) {
       socket.emit('playlist:play_next');
     } else {
       stopScreenShare();
-      cleanupLocalVideo();
       setActiveStream(null);
       setIsLiveStreamActive(false);
       setCurrentMedia({ type: 'NONE', url: '' });
@@ -674,7 +768,8 @@ const handleLoadUrl = () => {
     }
   };
 
-  const handleLocalFileSelect = (e) => {
+   const handleLocalFileSelect = async (e) => {
+    await requestMediaAccessPermission();
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -720,7 +815,7 @@ const handleLoadUrl = () => {
 
   const myVoiceVolume = speakingUsers[socket.id] || 0;
 
-  // 1. GİRİŞ & LOBİ EKRANI
+// 1. GİRİŞ & LOBİ EKRANI
   if (!roomData) {
     return (
       <div className={`w-screen min-h-screen ${currentTheme.bg} ${currentTheme.textColor} flex items-center justify-center p-3 md:p-6 transition-colors duration-300 relative overflow-y-auto`}>
@@ -728,37 +823,56 @@ const handleLoadUrl = () => {
         {/* Kart ve Butonları Bir Arada Tutan Kapsayıcı */}
         <div className="w-full max-w-lg flex flex-col my-auto py-3">
           
-          {/* Giriş Ekranı Üst Butonları */}
-          <div className="flex items-center justify-between mb-2 z-20 shrink-0 px-1">
+{/* Giriş Ekranı Üst Butonları (Mobilde Yalnızca İkonlar, Masaüstünde Yazılı) */}
+          <div className="flex items-center justify-between mb-2.5 z-20 shrink-0 px-1 gap-2">
+            {/* Sol: v1.2 Rozeti */}
             <button
               type="button"
               onClick={() => setIsChangelogOpen(true)}
-              className="px-2.5 py-1.5 rounded-xl border-2 border-black bg-amber-400 text-black shadow-[2px_2px_0px_#000] flex items-center gap-1.5 text-xs font-black cursor-pointer hover:bg-amber-300 transition-transform active:scale-95 animate-pulse"
-              title="Peerora 1.1.1 Hotfix"
+              className={`h-9 px-2.5 sm:px-3 rounded-2xl cursor-pointer ${currentTheme.buttonSecondary} shadow-md flex items-center gap-1.5 text-xs font-black whitespace-nowrap transition-transform active:scale-95`}
+              title="Peerora v1.2"
             >
-              <Sparkles size={14} fill="currentColor" />
-              <span>{t.gamerUpdateBadge}</span>
+              <Sparkles size={15} className="text-amber-500 fill-amber-400 shrink-0" />
+              <span>v1.2</span>
+              <span className="hidden sm:inline">🚀</span>
             </button>
 
-            <div className="flex items-center gap-2">
+            {/* Sağ: 3 İkon Yan Yana */}
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              {/* 1. İndirme Butonu */}
+              {platformDownload && (
+                <a
+                  href={platformDownload.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className={`w-9 h-9 sm:w-auto sm:px-3 rounded-2xl cursor-pointer ${currentTheme.buttonPrimary} shadow-md flex items-center justify-center sm:gap-1.5 text-xs font-bold whitespace-nowrap transition-transform active:scale-95`}
+                  title={platformDownload.label}
+                >
+                  {platformDownload.icon}
+                  <span className="hidden sm:inline">{lang === 'tr' ? 'İndir' : 'Download'}</span>
+                </a>
+              )}
+
+              {/* 2. Hakkında Butonu */}
               <button
                 type="button"
                 onClick={() => setIsAboutOpen(true)}
-                className={`p-2 sm:p-2.5 rounded-2xl cursor-pointer ${currentTheme.buttonSecondary} shadow-md flex items-center gap-1.5 text-xs font-bold transition-transform active:scale-95`}
+                className={`w-9 h-9 sm:w-auto sm:px-3 rounded-2xl cursor-pointer ${currentTheme.buttonSecondary} shadow-md flex items-center justify-center sm:gap-1.5 text-xs font-bold whitespace-nowrap transition-transform active:scale-95`}
                 title={t.about}
               >
-                <Info size={15} />
+                <Info size={16} className="shrink-0" />
                 <span className="hidden sm:inline">{t.about}</span>
               </button>
 
+              {/* 3. Ayarlar Butonu */}
               <button
                 type="button"
                 onClick={() => setIsSettingsOpen(true)}
-                className={`p-2 sm:p-2.5 rounded-2xl cursor-pointer ${currentTheme.buttonSecondary} shadow-md flex items-center gap-1.5 text-xs font-bold transition-transform active:scale-95`}
+                className={`w-9 h-9 sm:w-auto sm:px-3 rounded-2xl cursor-pointer ${currentTheme.buttonSecondary} shadow-md flex items-center justify-center sm:gap-1.5 text-xs font-bold whitespace-nowrap transition-transform active:scale-95`}
                 title={t.themeAndSettings}
               >
-                <Settings size={15} />
-                <span className="hidden sm:inline">{t.themeAndSettings}</span>
+                <Settings size={16} className="shrink-0" />
+                <span className="hidden sm:inline">{lang === 'tr' ? 'Ayarlar' : 'Settings'}</span>
               </button>
             </div>
           </div>
@@ -788,6 +902,7 @@ const handleLoadUrl = () => {
               </div>
             </div>
 
+            {/* Avatar & İsim */}
             <div className="flex gap-2 items-center">
               <button
                 type="button"
@@ -807,8 +922,10 @@ const handleLoadUrl = () => {
               />
             </div>
 
+            {/* 3'lü Lobi Sekme Çubuğu */}
             <div className="flex p-1 bg-black/10 rounded-2xl gap-1 text-xs font-bold">
               <button
+                type="button"
                 onClick={() => setLobbyTab('create')}
                 className={`flex-1 py-2 rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
                   lobbyTab === 'create' ? 'bg-blue-600 text-white shadow-md' : 'hover:bg-black/5 opacity-70'
@@ -817,6 +934,16 @@ const handleLoadUrl = () => {
                 <Sparkles size={14} /> {t.createTab}
               </button>
               <button
+                type="button"
+                onClick={() => setLobbyTab('join')}
+                className={`flex-1 py-2 rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                  lobbyTab === 'join' ? 'bg-blue-600 text-white shadow-md' : 'hover:bg-black/5 opacity-70'
+                }`}
+              >
+                <Link2 size={14} /> {t.joinTab || 'Kodla Katıl'}
+              </button>
+              <button
+                type="button"
                 onClick={() => {
                   setLobbyTab('explore');
                   socket.emit('rooms:get_public', (list) => setPublicRooms(list));
@@ -829,6 +956,7 @@ const handleLoadUrl = () => {
               </button>
             </div>
 
+            {/* 1. Sekme: Oda Oluştur */}
             {lobbyTab === 'create' ? (
               <div className="space-y-3.5">
                 <div>
@@ -900,36 +1028,35 @@ const handleLoadUrl = () => {
                 </div>
 
                 <button
+                  type="button"
                   onClick={handleCreateRoom}
                   className={`w-full ${currentTheme.buttonPrimary} py-2.5 text-sm font-black cursor-pointer shadow-lg`}
                 >
                   {t.createRoomBtn} ({maxUsersInput} {t.peopleCount})
                 </button>
-
-                <div className="flex items-center gap-2 text-xs opacity-50 my-1">
-                  <div className="flex-1 h-px bg-current" />
-                  <span>{t.orJoinWithCode}</span>
-                  <div className="flex-1 h-px bg-current" />
-                </div>
-
+              </div>
+            ) : lobbyTab === 'join' ? (
+              /* 2. Sekme: Kodla Katıl */
+              <div className="space-y-3.5 py-2">
                 <div className="flex gap-2">
                   <input
                     type="text"
                     placeholder={t.roomCodePlaceholder}
                     value={roomIdInput}
                     onChange={(e) => setRoomIdInput(e.target.value)}
-                    className={`flex-1 ${currentTheme.input} px-3 py-2 text-sm outline-none`}
+                    className={`flex-1 ${currentTheme.input} px-3 py-2.5 text-sm outline-none font-mono tracking-wider`}
                   />
                   <button
+                    type="button"
                     onClick={() => handleJoinRoom()}
-                    className={`${currentTheme.buttonSecondary} px-4 py-2 text-sm font-black cursor-pointer`}
+                    className={`${currentTheme.buttonPrimary} px-5 py-2.5 text-sm font-black cursor-pointer`}
                   >
                     {t.joinBtn}
                   </button>
                 </div>
 
                 {recentRooms.length > 0 && (
-                  <div className="pt-2 border-t border-black/10 space-y-1">
+                  <div className="pt-2 border-t border-black/10 space-y-1.5">
                     <span className="text-[11px] font-bold opacity-75 flex items-center gap-1">
                       <History size={12} /> {t.recentRooms}
                     </span>
@@ -937,6 +1064,7 @@ const handleLoadUrl = () => {
                       {recentRooms.map((code) => (
                         <button
                           key={code}
+                          type="button"
                           onClick={() => handleJoinRoom(code)}
                           className="px-2.5 py-1 text-xs font-mono font-bold rounded-lg bg-black/10 hover:bg-black/20 transition-colors cursor-pointer"
                         >
@@ -948,6 +1076,7 @@ const handleLoadUrl = () => {
                 )}
               </div>
             ) : (
+              /* 3. Sekme: Açık Odalar */
               <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
                 {publicRooms.length === 0 ? (
                   <div className="text-center text-xs opacity-60 py-10 flex flex-col items-center gap-2">
@@ -973,6 +1102,7 @@ const handleLoadUrl = () => {
                           {r.userCount}/{r.maxUsers}
                         </span>
                         <button
+                          type="button"
                           onClick={() => handleJoinRoom(r.roomId)}
                           className={`${currentTheme.buttonPrimary} px-3 py-1.5 text-xs font-black rounded-xl cursor-pointer`}
                         >
@@ -988,7 +1118,7 @@ const handleLoadUrl = () => {
         </div>
 
         {/* Lobi Modalları */}
-        <SettingsModal
+<SettingsModal
           isOpen={isSettingsOpen}
           onClose={() => setIsSettingsOpen(false)}
           userColor={userColor}
@@ -997,8 +1127,9 @@ const handleLoadUrl = () => {
           onThemeChange={(th) => { setSelectedTheme(th); localStorage.setItem('p2p_theme', th); }}
           lang={lang}
           onLangChange={handleLanguageChange}
+          notificationsEnabled={notificationsEnabled}
+          onToggleNotifications={handleToggleNotifications}
         />
-
         <AboutModal
           isOpen={isAboutOpen}
           onClose={() => setIsAboutOpen(false)}
@@ -1032,17 +1163,14 @@ const handleLoadUrl = () => {
           ))}
         </div>
 
-        {/* Üst Bilgi Barı */}
+   {/* Üst Bilgi Barı */}
         <div className={`flex items-center justify-between gap-2 ${currentTheme.headerPanel} px-2.5 py-1.5 md:px-5 md:py-2.5 shrink-0 shadow-md overflow-x-auto no-scrollbar w-full`}>
           <div className="flex items-center gap-1.5 shrink-0">
             <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse shrink-0" />
+
+            {/* Oda Kodu Kopyalama Butonu */}
             <button
-              onClick={handleCopyCode}
-              className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-mono cursor-pointer shrink-0 ${currentTheme.badge}`}
-              title={t.copyCode}
-            >
-              <span className="truncate max-w-20 sm:max-w-none">#{roomData.roomId}</span> {/* Oda Kodu */}
-            <button
+              type="button"
               onClick={handleCopyCode}
               className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-mono cursor-pointer shrink-0 ${currentTheme.badge}`}
               title={t.copyCode}
@@ -1051,7 +1179,7 @@ const handleLoadUrl = () => {
               {copied ? <Check size={13} className="text-emerald-300 shrink-0" /> : <Copy size={13} className="shrink-0" />}
             </button>
 
-            {/* 1.1.1: Davet Et / Paylaş Butonu */}
+            {/* Davet Et / Paylaş Butonu */}
             <button
               type="button"
               onClick={handleShareRoom}
@@ -1061,14 +1189,24 @@ const handleLoadUrl = () => {
               {shareCopied ? <Check size={13} className="text-emerald-300 shrink-0" /> : <Share2 size={13} className="shrink-0" />}
               <span className="hidden sm:inline">{shareCopied ? t.shareLinkCopied : t.shareRoom}</span>
             </button>
-              {copied ? <Check size={13} className="text-emerald-300 shrink-0" /> : <Copy size={13} className="shrink-0" />}
-            </button>
 
+            {/* Kullanıcı Listesi Butonu */}
             <button
+              type="button"
               onClick={() => setIsUserListOpen(true)}
               className="flex items-center gap-1 text-xs font-bold opacity-85 hover:opacity-100 cursor-pointer px-2 py-1 rounded-lg bg-black/10 transition-all shrink-0"
             >
               <Users size={13} /> {roomUsers.length}/{roomData.maxUsers || 10}
+            </button>
+
+            {/* 1.2: Ekrana Çağır / Dürt Butonu */}
+            <button
+              type="button"
+              onClick={handleSendNudge}
+              className={`p-2 rounded-xl cursor-pointer shrink-0 ${currentTheme.badge} hover:bg-black/15 transition-transform active:scale-95`}
+              title={t.nudgeBtn || 'Ekrana Çağır'}
+            >
+              <BellRing size={15} />
             </button>
           </div>
 
@@ -1165,20 +1303,29 @@ const handleLoadUrl = () => {
           </div>
         </div>
 
+        {/* 1.2: Nudge / Çağrı Görsel Bildirim Banner'ı */}
+        {nudgeToast && (
+          <div className="z-50 animate-bounce bg-amber-400 text-black border-2 border-black px-4 py-2 rounded-2xl shadow-[4px_4px_0px_#000] font-black text-xs flex items-center justify-center gap-2 mx-auto">
+            <BellRing size={16} className="animate-pulse text-amber-950" />
+            <span>{nudgeToast} {t.nudgedAlert || 'seni ekrana çağırıyor! 🍿'}</span>
+          </div>
+        )}
+
         {/* Ana Sahne */}
         <div className="flex-1 flex flex-col md:grid md:grid-cols-12 gap-3 min-h-0 overflow-hidden">
           <div className="flex flex-col gap-2.5 md:col-span-8 lg:col-span-9 min-h-0 justify-between">
             <div className="flex-1 min-h-0 flex items-center justify-center">
               {activeGame ? (
-                <GameStage
-                  key={activeGame.type + (activeGame.endTime || activeGame.word || '')}
-                  game={activeGame}
-                  socket={socket}
-                  isHost={roomData.isHost}
-                  userColor={userColor}
-                  onEndGame={handleEndGame}
-                  lang={lang}
-                />
+// YENİ HALİ:
+<GameStage
+  key={activeGame.type + (activeGame.endTime || activeGame.word || activeGame.turnEndTime || activeGame.syllable || '')}
+  game={activeGame}
+  socket={socket}
+  isHost={roomData.isHost}
+  userColor={userColor}
+  onEndGame={handleEndGame}
+  lang={lang}
+/>
               ) : (
 <VideoPlayer
                   sourceUrl={currentMedia.url}
@@ -1207,7 +1354,7 @@ const handleLoadUrl = () => {
               )}
             </div>
 
-            {/* Host Kontrolleri */}
+{/* Host Kontrolleri */}
             {roomData.isHost && (
               <div className="relative flex flex-col gap-2 shrink-0">
                 {mkvWarning && (
@@ -1235,18 +1382,23 @@ const handleLoadUrl = () => {
                     className="hidden"
                   />
 
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    className={`w-full md:w-auto px-3 py-2 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 cursor-pointer shadow-md shrink-0 ${currentTheme.buttonSecondary}`}
-                    title={t.selectLocalVideo}
-                  >
-                    <FileVideo size={15} />
-                    <span className="hidden sm:inline">{t.selectLocalVideo}</span>
-                  </button>
-
-                  {canShareScreen && (
+                  {/* Cihazdan Video Seç (Yalnızca ekran paylaşımı yokken) */}
+                  {!isLiveStreamActive && (
                     <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className={`w-full md:w-auto px-3 py-2 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 cursor-pointer shadow-md shrink-0 ${currentTheme.buttonSecondary}`}
+                      title={t.selectLocalVideo}
+                    >
+                      <FileVideo size={15} />
+                      <span className="hidden sm:inline">{t.selectLocalVideo}</span>
+                    </button>
+                  )}
+
+                  {/* Ekran Paylaşım Butonu: Yerel video açıkken gizlenir, Ekran paylaşımı varsa Stop Sharing görünür */}
+                  {canShareScreen && !localVideoUrl && (
+                    <button
+                      type="button"
                       onClick={handleToggleStream}
                       className={`w-full md:w-auto px-4 py-2 rounded-xl text-xs font-black flex items-center justify-center gap-2 cursor-pointer shadow-lg shrink-0 ${
                         isLiveStreamActive ? 'bg-rose-600 hover:bg-rose-500 text-white' : currentTheme.buttonPrimary
@@ -1273,14 +1425,15 @@ const handleLoadUrl = () => {
                       className={`flex-1 ${currentTheme.input} text-xs px-3 py-2 outline-none`}
                     />
                     <button
+                      type="button"
                       onClick={handleLoadUrl}
                       className={`${currentTheme.buttonPrimary} px-3 sm:px-4 py-2 text-xs font-black flex items-center gap-1.5 cursor-pointer shrink-0`}
                     >
                       <Link2 size={14} /> {t.loadBtn}
                     </button>
 
-                    {/* 1.1.1: Medyayı Kapat / Sıradakine Geç Butonu */}
-                    {(currentMedia.type !== 'NONE' || isLiveStreamActive || localVideoUrl) && (
+                    {/* Medyayı Kapat / Sıradakine Geç: Yerel video açıkken VEYA normal video açıkken görünür */}
+                    {(localVideoUrl || (currentMedia.type !== 'NONE' && !isLiveStreamActive)) && (
                       <button
                         type="button"
                         onClick={handleCloseOrNextMedia}
@@ -1297,6 +1450,7 @@ const handleLoadUrl = () => {
                 </div>
               </div>
             )}
+            
           </div>
 
           {/* Çet */}
@@ -1361,16 +1515,18 @@ const handleLoadUrl = () => {
         lang={lang}
       />
 
-      <SettingsModal
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
-        userColor={userColor}
-        onColorChange={(col) => { setUserColor(col); localStorage.setItem('p2p_userColor', col); }}
-        selectedTheme={selectedTheme}
-        onThemeChange={(th) => { setSelectedTheme(th); localStorage.setItem('p2p_theme', th); }}
-        lang={lang}
-        onLangChange={handleLanguageChange}
-      />
+<SettingsModal
+          isOpen={isSettingsOpen}
+          onClose={() => setIsSettingsOpen(false)}
+          userColor={userColor}
+          onColorChange={(col) => { setUserColor(col); localStorage.setItem('p2p_userColor', col); }}
+          selectedTheme={selectedTheme}
+          onThemeChange={(th) => { setSelectedTheme(th); localStorage.setItem('p2p_theme', th); }}
+          lang={lang}
+          onLangChange={handleLanguageChange}
+          notificationsEnabled={notificationsEnabled}
+          onToggleNotifications={handleToggleNotifications}
+        />
 
       <AboutModal
         isOpen={isAboutOpen}
@@ -1392,6 +1548,14 @@ const handleLoadUrl = () => {
         onClose={() => setIsGameModalOpen(false)}
         onStartGame={(gameType, customConfig) => socket.emit('game:start', { gameType, lang, customConfig })}
         isHost={roomData.isHost}
+        theme={currentTheme}
+        lang={lang}
+      />
+
+      {/* 1.2: Uygulama Değerlendirme Modalı */}
+      <RatingModal
+        isOpen={isRatingModalOpen}
+        onClose={() => setIsRatingModalOpen(false)}
         theme={currentTheme}
         lang={lang}
       />

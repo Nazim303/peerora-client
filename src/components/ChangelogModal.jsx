@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, Sparkles, FileVideo, Gamepad2, Zap, Smartphone } from 'lucide-react';
+import { X, Sparkles, Gamepad2, Palette, BellRing, MonitorDown } from 'lucide-react';
 import { translations } from '../locales/translations';
 
 export default function ChangelogModal({ isOpen, onClose, theme, lang = 'tr' }) {
@@ -8,24 +8,24 @@ export default function ChangelogModal({ isOpen, onClose, theme, lang = 'tr' }) 
 
   const features = [
     {
-      icon: <FileVideo size={18} className="text-blue-500" />,
-      title: t.featureLocalVideoTitle,
-      desc: t.featureLocalVideoDesc
+      icon: <Gamepad2 size={18} className="text-rose-500" />,
+      title: t.featureV12GameTitle || "💣 Yeni Oyun: Kelime Bombası",
+      desc: t.featureV12GameDesc || "Verilen heceye uygun kelimeyi bomba elinizde patlamadan chate yazıp devredin!"
     },
     {
-      icon: <Gamepad2 size={18} className="text-amber-500" />,
-      title: t.featureMiniGamesTitle,
-      desc: t.featureMiniGamesDesc
+      icon: <Palette size={18} className="text-emerald-600" />,
+      title: t.featureV12ThemeTitle || "🍵 Yeni Tema: Cozy Japan",
+      desc: t.featureV12ThemeDesc || "Yatıştırıcı matcha yeşili ve dinlendirici pastel pirinç kağıdı estetiği."
     },
     {
-      icon: <Zap size={18} className="text-emerald-500" />,
-      title: t.featureConnectionTitle,
-      desc: t.featureConnectionDesc
+      icon: <BellRing size={18} className="text-amber-500" />,
+      title: t.featureV12NudgeTitle || "🛎️ Ekrana Çağır / Nudge Bildirimleri",
+      desc: t.featureV12NudgeDesc || "Odadakileri melodi çanı ve sistem bildirimleriyle video başına anında toplayın."
     },
     {
-      icon: <Smartphone size={18} className="text-purple-500" />,
-      title: t.featureMobileOptTitle,
-      desc: t.featureMobileOptDesc
+      icon: <MonitorDown size={18} className="text-blue-500" />,
+      title: t.featureV12PlatformTitle || "💻 Platforma Özel İndirme & Windows",
+      desc: t.featureV12PlatformDesc || "Masaüstünde Windows uygulaması, mobilde doğrudan APK indirme bağlantıları."
     }
   ];
 
@@ -39,8 +39,12 @@ export default function ChangelogModal({ isOpen, onClose, theme, lang = 'tr' }) 
               <Sparkles size={16} />
             </span>
             <div>
-              <h3 className="text-xs sm:text-sm font-black tracking-wide">{t.changelogTitle}</h3>
-              <p className="text-[10px] opacity-70">{t.changelogSubtitle}</p>
+              <h3 className="text-xs sm:text-sm font-black tracking-wide">
+                Peerora v1.2
+              </h3>
+              <p className="text-[10px] opacity-70">
+                {t.v12ChangelogSubtitle || "Yeni oyun, tema ve platform destekleri!"}
+              </p>
             </div>
           </div>
           <button onClick={onClose} className="p-1 cursor-pointer opacity-70 hover:opacity-100">

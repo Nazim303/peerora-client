@@ -730,20 +730,22 @@ export default function VideoPlayer({
         </div>
       )}
 
-      {/* ÜST KONTROL ÇUBUKLARI */}
-      <div className="absolute top-3 inset-x-3 z-40 flex items-center justify-between pointer-events-none">
-        <div className="flex items-center gap-2 pointer-events-auto">
+{/* ÜST KONTROL ÇUBUKLARI */}
+      <div className="absolute top-2 sm:top-3 inset-x-2 sm:inset-x-3 z-40 flex items-center justify-between pointer-events-none gap-1">
+        {/* Sol Kontroller */}
+        <div className="flex items-center gap-1 sm:gap-2 pointer-events-auto shrink-0">
           <button
+            type="button"
             onClick={() => setIsLaserMode((prev) => !prev)}
-            className={`p-2 rounded-xl backdrop-blur-md border text-xs font-bold flex items-center gap-1 cursor-pointer transition-all shadow-lg ${
+            className={`p-1.5 sm:p-2 rounded-xl backdrop-blur-md border text-xs font-bold flex items-center gap-1 cursor-pointer transition-all shadow-lg ${
               isLaserMode
                 ? 'bg-rose-600 text-white border-rose-400 animate-pulse'
                 : 'bg-black/75 hover:bg-black/90 text-gray-300 border-white/10'
             }`}
             title={isLaserMode ? t.laserOn : t.laser}
           >
-            <Wand2 size={15} />
-            <span className="hidden sm:inline">{isLaserMode ? t.laserOn : t.laser}</span>
+            <Wand2 size={14} />
+            <span className="hidden md:inline">{isLaserMode ? t.laserOn : t.laser}</span>
           </button>
 
           {/* Host için Yeniden Dene Butonu */}
@@ -751,23 +753,23 @@ export default function VideoPlayer({
             <button
               type="button"
               onClick={handleRetryVideo}
-              className="bg-black/75 hover:bg-black/90 text-amber-300 p-2 rounded-xl backdrop-blur-md border border-white/10 text-xs font-bold flex items-center gap-1 cursor-pointer shadow-lg active:scale-95 transition-transform"
+              className="bg-black/75 hover:bg-black/90 text-amber-300 p-1.5 sm:p-2 rounded-xl backdrop-blur-md border border-white/10 text-xs font-bold flex items-center gap-1 cursor-pointer shadow-lg active:scale-95 transition-transform"
               title={t.retryVideo || 'Yeniden Dene'}
             >
               <RefreshCw size={14} />
-              <span className="hidden md:inline">{t.retryVideo || 'Yeniden Dene'}</span>
             </button>
           )}
 
           {isHost && (sourceUrl || isLiveStreamActive || localVideoUrl) && (
             <div className="relative">
               <button
+                type="button"
                 onClick={() => setShowSpeedMenu((p) => !p)}
-                className="bg-black/75 hover:bg-black/90 text-white p-2 rounded-xl backdrop-blur-md border border-white/10 text-xs font-bold flex items-center gap-1 cursor-pointer shadow-lg"
+                className="bg-black/75 hover:bg-black/90 text-white p-1.5 sm:p-2 rounded-xl backdrop-blur-md border border-white/10 text-xs font-bold flex items-center gap-1 cursor-pointer shadow-lg"
                 title={t.playbackSpeed}
               >
                 <Gauge size={14} />
-                <span>{currentSpeed}x</span>
+                <span className="text-[10px] sm:text-xs">{currentSpeed}x</span>
               </button>
 
               {showSpeedMenu && (
@@ -775,6 +777,7 @@ export default function VideoPlayer({
                   {[0.75, 1.0, 1.25, 1.5, 2.0].map((s) => (
                     <button
                       key={s}
+                      type="button"
                       onClick={() => handleSpeedChange(s)}
                       className={`px-2 py-1 rounded-lg font-bold flex items-center justify-between cursor-pointer transition-colors ${
                         currentSpeed === s ? 'bg-blue-600 text-white' : 'hover:bg-white/10 text-gray-300'
@@ -791,25 +794,29 @@ export default function VideoPlayer({
 
           {!isHost && (sourceUrl || isLiveStreamActive || localVideoUrl) && (
             <button
+              type="button"
               onClick={handleJumpToHost}
-              className="bg-amber-500/90 hover:bg-amber-400 text-black font-black px-2.5 py-1.5 rounded-xl backdrop-blur-md border border-amber-300 text-xs flex items-center gap-1 cursor-pointer shadow-lg transition-transform active:scale-95"
+              className="bg-amber-500/90 hover:bg-amber-400 text-black font-black px-2 py-1.5 rounded-xl backdrop-blur-md border border-amber-300 text-xs flex items-center gap-1 cursor-pointer shadow-lg transition-transform active:scale-95"
               title={t.syncHostTitle}
             >
-              <Zap size={14} fill="currentColor" />
+              <Zap size={13} fill="currentColor" />
               <span className="hidden sm:inline">{t.syncHost}</span>
             </button>
           )}
         </div>
 
-        <div className="flex items-center gap-1.5 pointer-events-auto shrink-0">
-          <div className="flex items-center gap-1 bg-black/75 backdrop-blur-md border border-white/10 px-2 py-1.5 rounded-xl shadow-lg">
+        {/* Sağ Kontroller */}
+        <div className="flex items-center gap-1 sm:gap-1.5 pointer-events-auto shrink-0">
+          <div className="flex items-center gap-1 bg-black/75 backdrop-blur-md border border-white/10 px-1.5 sm:px-2 py-1 sm:py-1.5 rounded-xl shadow-lg">
             <button
+              type="button"
               onClick={handleToggleMute}
               className="text-gray-300 hover:text-white cursor-pointer"
               title={isLocalMuted ? t.unmuteBtn : 'Mute'}
             >
-              {isLocalMuted || localVolume === 0 ? <VolumeX size={15} /> : <Volume2 size={15} />}
+              {isLocalMuted || localVolume === 0 ? <VolumeX size={14} /> : <Volume2 size={14} />}
             </button>
+            {/* Slider sadece sm ve üstü ekranlarda yer kaplar, mobilde taşmayı önler */}
             <input
               type="range"
               min="0"
@@ -817,30 +824,34 @@ export default function VideoPlayer({
               step="5"
               value={isLocalMuted ? 0 : localVolume}
               onChange={(e) => handleVolumeChange(parseInt(e.target.value, 10))}
-              className="w-10 sm:w-16 accent-blue-500 cursor-pointer h-1 bg-white/20 rounded-lg"
+              className="hidden sm:block w-14 accent-blue-500 cursor-pointer h-1 bg-white/20 rounded-lg"
             />
           </div>
 
           <button
+            type="button"
             onClick={handleToggleCc}
-            className={`p-2 rounded-xl backdrop-blur-md border text-xs font-bold flex items-center gap-1 cursor-pointer transition-all shadow-lg ${
+            className={`p-1.5 sm:p-2 rounded-xl backdrop-blur-md border text-xs font-bold flex items-center gap-1 cursor-pointer transition-all shadow-lg ${
               isCcActive
                 ? 'bg-blue-600 text-white border-blue-400'
                 : 'bg-black/75 hover:bg-black/90 text-gray-300 border-white/10'
             }`}
             title={t.captionsTitle}
           >
-            <Subtitles size={15} />
+            <Subtitles size={14} />
           </button>
 
           <div className="relative">
             <button
+              type="button"
               onClick={() => setShowQualityMenu((p) => !p)}
-              className="bg-black/75 hover:bg-black/90 text-white p-2 rounded-xl backdrop-blur-md border border-white/10 text-xs font-bold flex items-center gap-1 cursor-pointer shadow-lg"
+              className="bg-black/75 hover:bg-black/90 text-white p-1.5 sm:p-2 rounded-xl backdrop-blur-md border border-white/10 text-xs font-bold flex items-center gap-1 cursor-pointer shadow-lg"
               title={t.qualityTitle}
             >
               <SettingsIcon size={14} />
-              <span className="uppercase text-[10px]">{selectedQuality === 'auto' ? t.autoQuality : selectedQuality.replace('hd', '') + 'p'}</span>
+              <span className="uppercase text-[9px] sm:text-[10px]">
+                {selectedQuality === 'auto' ? t.autoQuality : selectedQuality.replace('hd', '') + 'p'}
+              </span>
             </button>
 
             {showQualityMenu && (
@@ -854,6 +865,7 @@ export default function VideoPlayer({
                 ].map((q) => (
                   <button
                     key={q.id}
+                    type="button"
                     onClick={() => handleQualityChange(q.id)}
                     className={`px-2 py-1 rounded-lg font-bold flex items-center justify-between cursor-pointer transition-colors ${
                       selectedQuality === q.id ? 'bg-blue-600 text-white' : 'hover:bg-white/10 text-gray-300'
@@ -869,11 +881,12 @@ export default function VideoPlayer({
 
           {(sourceUrl || isLiveStreamActive || localVideoUrl) && (
             <button
+              type="button"
               onClick={toggleFullscreen}
-              className="bg-black/75 hover:bg-black/90 text-white p-2 rounded-xl backdrop-blur-md border border-white/10 transition-all cursor-pointer shadow-lg active:scale-95"
+              className="bg-black/75 hover:bg-black/90 text-white p-1.5 sm:p-2 rounded-xl backdrop-blur-md border border-white/10 transition-all cursor-pointer shadow-lg active:scale-95"
               title={t.fullscreenTitle}
             >
-              {isFullscreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+              {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
             </button>
           )}
         </div>

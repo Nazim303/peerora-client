@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, Gamepad2, Palette, ShieldAlert } from 'lucide-react';
+import { X, Gamepad2, Palette, ShieldAlert, Bomb } from 'lucide-react';
 import { translations } from '../locales/translations';
 
 export default function GameModal({ isOpen, onClose, onStartGame, isHost, theme, lang = 'tr' }) {
@@ -16,6 +16,9 @@ const handleSelect = (type) => {
       const locs = t.spyfallLocations || ['Sinema', 'Uçak'];
       const location = locs[Math.floor(Math.random() * locs.length)];
       onStartGame('SPYFALL', { location });
+    } else if (type === 'WORDBOMB') {
+      // Kelime bombası sinyalini gönder
+      onStartGame('WORDBOMB');
     }
     onClose();
   };
@@ -62,6 +65,22 @@ const handleSelect = (type) => {
             <div>
               <h4 className="text-xs font-black">{t.spyfallGameTitle}</h4>
               <p className="text-[11px] opacity-70 leading-tight mt-0.5">{t.spyfallGameDesc}</p>
+            </div>
+          </button>
+
+{/* 1.2: Kelime Bombası Butonu */}
+          <button
+            type="button"
+            onClick={() => handleSelect('WORDBOMB')}
+            disabled={!isHost}
+            className="w-full p-3 rounded-xl border border-black/15 bg-black/5 hover:bg-black/10 text-left transition-all cursor-pointer flex items-start gap-3 disabled:opacity-50"
+          >
+            <div className="p-2 rounded-lg bg-rose-600 text-white shrink-0 shadow-sm">
+              <Bomb size={20} />
+            </div>
+            <div>
+              <h4 className="text-xs font-black">{t.wordbombGameTitle || '💣 Kelime Bombası'}</h4>
+              <p className="text-[11px] opacity-70 leading-tight mt-0.5">{t.wordbombGameDesc || 'Heceye uygun kelimeyi chate yaz, bombayı devret!'}</p>
             </div>
           </button>
         </div>
